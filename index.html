@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1" />
+  <title>Лічильник Віджимань</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    html, body {
+      overscroll-behavior: none;
+      overflow: hidden;
+      touch-action: manipulation;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <button id="theme-toggle">Змінити тему</button>
+    <h1>Віджимання</h1>
+    <div class="counter">
+      <button id="decrement">-</button>
+      <span id="count">0</span>
+      <button id="increment">+</button>
+    </div>
+    <h2>Статистика за тиждень</h2>
+    <ul id="week-stats"></ul>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

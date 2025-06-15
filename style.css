@@ -1,0 +1,70 @@
+:root {
+  --bg-color: #121212;
+  --text-color: #ffffff;
+  --btn-bg: #333333;
+  --btn-hover: #444444;
+}
+
+body.light {
+  --bg-color: #f0f0f0;
+  --text-color: #000000;
+  --btn-bg: #4caf50;
+  --btn-hover: #45a049;
+}
+
+body {
+  font-family: sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.container {
+  max-width: 400px;
+  width: 100%;
+  padding: 20px;
+  background: var(--bg-color);
+  margin-top: 40px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.3);
+}
+
+h1, h2 {
+  text-align: center;
+}
+
+.counter {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  font-size: 2em;
+  margin: 20px 0;
+}
+
+button {
+  font-size: 1.2em;
+  padding: 10px 20px;
+  border: none;
+  background-color: var(--btn-bg);
+  color: var(--text-color);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: var(--btn-hover);
+}
+
+#week-stats {
+  list-style: none;
+  padding: 0;
+}
+
+#week-stats li {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}

@@ -1,0 +1,11 @@
+{
+  "name": "RepTrack — тренування",
+  "short_name": "RepTrack",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#090b10",
+  "theme_color": "#090b10",
+  "description": "Трекер повторень, цілей та streak для тренувань"
+}

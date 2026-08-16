@@ -27,7 +27,8 @@ const state = {
   currentScreen: 'home',
   modalExercise: null,
   builderMode: 'category',
-  theme: localStorage.getItem('repTheme') || 'dark'
+  theme: localStorage.getItem('repTheme') || 'dark',
+  settings: loadSettings()
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -36,7 +37,12 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 function loadCategories() {
   try {
     const raw = JSON.parse(localStorage.getItem('repTrackCategories') || 'null');
-    if (Array.isArray(raw) && raw.length) return raw;
+    if (Array.isArray(raw) && raw.length) {
+      const defaults = new Set(DEFAULT_CATEGORIES.map(c => c.id));
+      const migrated = raw.map(c => ({ ...c, custom: defaults.has(c.id) ? false : true }));
+      localStorage.setItem('repTrackCategories', JSON.stringify(migrated));
+      return migrated;
+    }
   } catch {}
   const categories = [...DEFAULT_CATEGORIES];
   localStorage.setItem('repTrackCategories', JSON.stringify(categories));
@@ -46,7 +52,12 @@ function loadCategories() {
 function loadExercises() {
   try {
     const raw = JSON.parse(localStorage.getItem('repTrackExercises') || 'null');
-    if (Array.isArray(raw) && raw.length) return raw;
+    if (Array.isArray(raw) && raw.length) {
+      const defaults = new Set(DEFAULT_EXERCISES.map(e => e.id));
+      const migrated = raw.map(e => ({ ...e, custom: defaults.has(e.id) ? false : true }));
+      localStorage.setItem('repTrackExercises', JSON.stringify(migrated));
+      return migrated;
+    }
   } catch {}
   const exercises = [...DEFAULT_EXERCISES];
   localStorage.setItem('repTrackExercises', JSON.stringify(exercises));
@@ -58,6 +69,20 @@ function loadLogs() {
     const raw = JSON.parse(localStorage.getItem('repTrackLogs') || '{}');
     return raw && typeof raw === 'object' ? raw : {};
   } catch { return {}; }
+}
+
+function loadSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('repTrackSettings') || 'null');
+    if (raw && typeof raw === 'object') return { dailyGoal: Math.max(1, Number(raw.dailyGoal || 50)) };
+  } catch {}
+  const settings = { dailyGoal: 50 };
+  localStorage.setItem('repTrackSettings', JSON.stringify(settings));
+  return settings;
+}
+
+function saveSettings() {
+  localStorage.setItem('repTrackSettings', JSON.stringify(state.settings));
 }
 
 function persistLibrary() {
@@ -101,14 +126,56 @@ function setupMobileUX() {
   let lastTouchEnd = 0;
   document.addEventListener('touchend', e => {
     const now = Date.now();
-    if (now - lastTouchEnd <= 280) e.preventDefault();
+    if (now - lastTouchEnd <= 300) e.preventDefault();
     lastTouchEnd = now;
   }, { passive: false });
   window.addEventListener('resize', () => document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`));
+  window.addEventListener('orientationchange', () => setTimeout(() => document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`), 150));
+  setupLiquidNav(isIPhone);
+}
+
+function setupLiquidNav(isIPhone) {
+  const nav = document.querySelector('.bottom-nav');
+  const lens = nav?.querySelector('.liquid-lens');
+  if (!nav || !lens || !isIPhone) return;
+  const moveLens = (clientX) => {
+    const rect = nav.getBoundingClientRect();
+    const items = [...nav.querySelectorAll('.nav-item')];
+    const index = Math.max(0, Math.min(items.length - 1, Math.floor((clientX - rect.left) / (rect.width / items.length))));
+    const item = items[index];
+    if (!item) return;
+    const ir = item.getBoundingClientRect();
+    lens.style.setProperty('--lens-x', `${ir.left - rect.left + 4}px`);
+    lens.style.setProperty('--lens-w', `${ir.width - 8}px`);
+    lens.classList.add('is-moving');
+    return item;
+  };
+  const settleLens = () => {
+    const active = nav.querySelector('.nav-item.active');
+    if (active) {
+      const rect = nav.getBoundingClientRect(), r = active.getBoundingClientRect();
+      lens.style.setProperty('--lens-x', `${r.left - rect.left + 4}px`);
+      lens.style.setProperty('--lens-w', `${r.width - 8}px`);
+    }
+    lens.classList.remove('is-moving');
+  };
+  nav.addEventListener('touchmove', (e) => {
+    const item = moveLens(e.touches[0].clientX);
+    if (item) { e.preventDefault(); }
+  }, { passive: false });
+  nav.addEventListener('touchend', (e) => {
+    const item = moveLens(e.changedTouches[0].clientX);
+    if (item) item.click();
+    setTimeout(settleLens, 30);
+  }, { passive: true });
+  nav.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') moveLens(e.clientX); });
+  window.addEventListener('resize', settleLens);
+  setTimeout(settleLens, 40);
 }
 
 function init() {
   setupMobileUX();
+  registerServiceWorker();
   migrateLegacyData();
   applyTheme(state.theme);
   bindNavigation();
@@ -116,8 +183,15 @@ function init() {
   bindModal();
   bindBuilder();
   bindCalendarControls();
+  renderSettingsUI();
   $('#today-label').textContent = formatFullDate(state.selectedDate);
+  $('#hero-streak').textContent = `🔥 ${currentStreak()} ${pluralDays(currentStreak())} поспіль`;
   renderAll();
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try { await navigator.serviceWorker.register('./sw.js'); } catch {}
 }
 
 function migrateLegacyData() {
@@ -132,6 +206,7 @@ function bindNavigation() {
   $('#fab-add').addEventListener('click', () => {
     if (state.exercises.length) openLogModal(state.exercises[0]);
   });
+  bindSettings();
 }
 
 function showScreen(name) {
@@ -153,6 +228,21 @@ function bindTheme() {
 function applyTheme(theme) {
   document.body.classList.toggle('light', theme === 'light');
   $('#theme-toggle').textContent = theme === 'dark' ? '☼' : '☾';
+}
+
+function bindSettings() {
+  $('#daily-goal-input').addEventListener('change', syncSettingsFromUI);
+  $('#save-settings').addEventListener('click', () => {
+    syncSettingsFromUI();
+    saveSettings();
+    renderAll();
+    toast('Ціль збережено');
+  });
+}
+
+function syncSettingsFromUI() {
+  const goal = Math.max(1, Math.floor(Number($('#daily-goal-input').value || 50)));
+  state.settings.dailyGoal = Math.min(99999, goal);
 }
 
 function bindModal() {
@@ -201,6 +291,7 @@ function bindBuilder() {
   $('#builder-modal').addEventListener('click', e => { if (e.target.id === 'builder-modal') closeBuilder(); });
   $$('.builder-tab').forEach(tab => tab.addEventListener('click', () => setBuilderMode(tab.dataset.builderMode)));
   $('#open-builder').addEventListener('click', () => openBuilder('category'));
+  $('#restore-defaults')?.addEventListener('click', restoreDefaultLibrary);
   $('#save-category').addEventListener('click', createCategory);
   $('#save-exercise').addEventListener('click', createExercise);
 }
@@ -208,7 +299,7 @@ function bindBuilder() {
 function openBuilder(mode = 'category') {
   setBuilderMode(mode);
   $('#builder-modal').classList.remove('hidden');
-  $('#category-name').focus();
+  (mode === 'category' ? $('#category-name') : $('#exercise-name')).focus();
 }
 
 function closeBuilder() { $('#builder-modal').classList.add('hidden'); }
@@ -263,12 +354,50 @@ function createExercise() {
   toast(`Вправу «${name}» додано`);
 }
 
-function renderAll() { renderHome(); renderExercises(); renderCalendar(); renderSummary(); }
+function pluralDays(n) {
+  const x = Math.abs(n) % 100, y = x % 10;
+  if (x >= 11 && x <= 14) return 'днів';
+  if (y === 1) return 'день';
+  if (y >= 2 && y <= 4) return 'дні';
+  return 'днів';
+}
+
+function currentStreak() {
+  let date = parseDate(localDateKey());
+  let count = 0;
+  while (dayTotal(localDateKey(date)) > 0) { count++; date.setDate(date.getDate() - 1); }
+  return count;
+}
+
+function bestStreak() {
+  const days = Object.keys(state.logs).filter(d => dayTotal(d) > 0).sort();
+  let best = 0, run = 0, prev = null;
+  for (const day of days) {
+    if (prev) { const diff = Math.round((parseDate(day)-parseDate(prev))/86400000); if (diff === 1) run++; else run = 1; } else run = 1;
+    best = Math.max(best, run); prev = day;
+  }
+  return best;
+}
+
+function renderGoalUI(total = dayTotal(state.selectedDate)) {
+  const goal = Math.max(1, Number(state.settings.dailyGoal || 50));
+  const percent = Math.min(100, Math.round((total / goal) * 100));
+  $('#goal-title').textContent = `${total.toLocaleString('uk-UA')} / ${goal.toLocaleString('uk-UA')} повторень`;
+  $('#goal-fill').style.width = `${percent}%`;
+  $('#goal-status').textContent = percent >= 100 ? '🎯 Ціль виконана' : `${percent}%`;
+  $('#goal-status').classList.toggle('done', percent >= 100);
+  $('#goal-left').textContent = percent >= 100 ? 'Сьогодні ціль закрито' : `Залишилось ${(goal-total).toLocaleString('uk-UA')}`;
+  if ('setAppBadge' in navigator && percent >= 100) navigator.setAppBadge(1).catch(() => {});
+  $('#best-streak-inline').textContent = `Рекорд: ${bestStreak()} ${pluralDays(bestStreak())}`;
+}
+
+function renderAll() { renderHome(); renderExercises(); renderCalendar(); renderSummary(); renderSettingsUI(); }
 
 function renderHome() {
   const total = dayTotal(state.selectedDate);
   $('#today-total').textContent = total.toLocaleString('uk-UA');
   $('#today-label').textContent = formatFullDate(state.selectedDate);
+  $('#hero-streak').textContent = `🔥 ${currentStreak()} ${pluralDays(currentStreak())} поспіль`;
 
   const quick = state.exercises.slice(0, 6);
   $('#quick-exercises').innerHTML = quick.length ? quick.map(exercise => {
@@ -297,54 +426,60 @@ function renderHome() {
 
 function renderExercises() {
   const root = $('#exercise-sections');
-  root.innerHTML = state.categories.map(category => {
+  root.innerHTML = state.categories.length ? state.categories.map(category => {
     const exercises = exercisesInCategory(category.id);
     return `<section class="exercise-section" data-category="${category.id}">
       <div class="section-headline">
         <div class="section-title-wrap"><span class="section-icon">${escapeHtml(category.icon || '◉')}</span><div><h3>${escapeHtml(category.name)}</h3><span>${exercises.length} ${exercises.length === 1 ? 'вправа' : exercises.length < 5 ? 'вправи' : 'вправ'}</span></div></div>
         <div class="section-actions">
-          <button class="mini-add" data-add-section="${category.id}" title="Додати вправу">＋</button>
-          ${category.custom ? `<button class="mini-more" data-section-menu="${category.id}" title="Дії розділу" aria-label="Дії розділу">•••</button>` : ''}
+          <button class="mini-add" data-add-section="${category.id}" title="Додати вправу" aria-label="Додати вправу до розділу ${escapeHtml(category.name)}">＋</button>
+          <button class="mini-more" data-section-menu="${category.id}" title="Керування розділом" aria-label="Керування розділом">•••</button>
         </div>
       </div>
       <div class="exercise-list">${exercises.length ? exercises.map(ex => {
         const amount = Number(dayData(state.selectedDate)[ex.id] || 0);
         return `<div class="exercise-row hover-lift">
           <button class="exercise-row-main" data-log-id="${ex.id}"><span class="row-icon">${escapeHtml(ex.icon || '✦')}</span><span><b>${escapeHtml(ex.name)}</b><small>${escapeHtml(ex.hint || '')} · ${amount} сьогодні</small></span></button>
-          <div class="row-actions"><button class="add-small" data-add-id="${ex.id}" aria-label="Додати ${escapeHtml(ex.name)}">＋</button>${ex.custom ? `<button class="remove-small" data-delete-exercise="${ex.id}" aria-label="Видалити вправу">×</button>` : ''}</div>
+          <div class="row-actions"><button class="add-small" data-add-id="${ex.id}" aria-label="Додати ${escapeHtml(ex.name)}">＋</button><button class="delete-small" data-delete-exercise="${ex.id}" title="Видалити вправу" aria-label="Видалити вправу">🗑</button></div>
         </div>`;
       }).join('') : '<div class="empty-inline">У цьому розділі поки немає вправ.</div>'}</div>
     </section>`;
-  }).join('');
+  }).join('') : `<div class="empty-card"><strong>Розділів немає</strong><p>Створи свій розділ або віднови стандартні вправи.</p><button class="secondary-btn" id="restore-defaults-inline">↻ Відновити стандартні</button></div>`;
 
   $$('#exercise-sections [data-log-id]').forEach(btn => btn.addEventListener('click', () => openLogModal(exerciseById(btn.dataset.logId))));
   $$('#exercise-sections [data-add-id]').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); openLogModal(exerciseById(btn.dataset.addId)); }));
   $$('#exercise-sections [data-add-section]').forEach(btn => btn.addEventListener('click', () => { openBuilder('exercise'); $('#exercise-category').value = btn.dataset.addSection; }));
-  $$('#exercise-sections [data-delete-exercise]').forEach(btn => btn.addEventListener('click', () => deleteCustomExercise(btn.dataset.deleteExercise)));
-  $$('#exercise-sections [data-delete-section]').forEach(btn => btn.addEventListener('click', () => deleteCustomCategory(btn.dataset.deleteSection)));
+  $$('#exercise-sections [data-delete-exercise]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); deleteExercise(btn.dataset.deleteExercise); }));
+  $$('#exercise-sections [data-section-menu]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openCategoryMenu(btn.dataset.sectionMenu, btn); }));
+  $('#restore-defaults-inline')?.addEventListener('click', restoreDefaultLibrary);
 }
 
 function openCategoryMenu(id, anchor) {
   const category = categoryById(id);
-  if (!category || !category.custom) return;
+  if (!category) return;
   closeCategoryMenu();
   const menu = document.createElement('div');
   menu.className = 'category-menu';
   menu.innerHTML = `
     <button data-menu-add>＋ Додати вправу</button>
-    <button class="danger-menu" data-menu-delete>Видалити розділ</button>`;
+    <button data-menu-restore>↻ Відновити стандартні</button>
+    <button class="danger-menu" data-menu-delete>🗑 Видалити розділ</button>`;
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
-  menu.style.top = `${Math.min(window.innerHeight - 130, r.bottom + 8)}px`;
-  menu.style.left = `${Math.max(12, Math.min(window.innerWidth - 192, r.right - 184))}px`;
+  menu.style.top = `${Math.min(window.innerHeight - 160, r.bottom + 8)}px`;
+  menu.style.left = `${Math.max(12, Math.min(window.innerWidth - 200, r.right - 192))}px`;
   menu.querySelector('[data-menu-add]').addEventListener('click', () => {
     closeCategoryMenu();
     openBuilder('exercise');
     $('#exercise-category').value = id;
   });
+  menu.querySelector('[data-menu-restore]').addEventListener('click', () => {
+    closeCategoryMenu();
+    restoreDefaultLibrary();
+  });
   menu.querySelector('[data-menu-delete]').addEventListener('click', () => {
     closeCategoryMenu();
-    deleteCustomCategory(id);
+    deleteCategory(id);
   });
   setTimeout(() => document.addEventListener('click', categoryMenuOutside, { once: true }), 0);
   window.__repTrackCategoryMenu = menu;
@@ -358,24 +493,33 @@ function closeCategoryMenu() {
   window.__repTrackCategoryMenu = null;
 }
 
-function deleteCustomExercise(id) {
+function deleteExercise(id) {
   const ex = exerciseById(id); if (!ex) return;
-  if (!confirm(`Видалити вправу «${ex.name}»?`)) return;
+  if (!confirm(`Видалити вправу «${ex.name}»?\n\nЇї записи в календарі також буде видалено.\n\nНатисни OK, щоб підтвердити.`)) return;
   state.exercises = state.exercises.filter(item => item.id !== id);
   Object.keys(state.logs).forEach(day => { if (state.logs[day]?.[id] != null) delete state.logs[day][id]; if (!Object.keys(state.logs[day] || {}).length) delete state.logs[day]; });
   persistLibrary(); saveLogs(); renderAll(); toast('Вправу видалено');
 }
 
-function deleteCustomCategory(id) {
-  const category = categoryById(id); if (!category || !category.custom) return;
+function deleteCategory(id) {
+  const category = categoryById(id); if (!category) return;
   const exs = exercisesInCategory(id);
-  const detail = exs.length ? `Це видалить також ${exs.length} ${exs.length === 1 ? 'вправу' : exs.length < 5 ? 'вправи' : 'вправ'}.` : 'Розділ порожній.';
-  if (!confirm(`Видалити «${category.name}»?\n\n${detail}`)) return;
+  const detail = exs.length ? `Буде видалено також ${exs.length} ${exs.length === 1 ? 'вправу' : exs.length < 5 ? 'вправи' : 'вправ'} та їхню історію.` : 'Розділ порожній.';
+  const ok = confirm(`Видалити розділ «${category.name}»?\n\n${detail}\n\nЦю дію можна скасувати лише вручну, відновивши стандартну бібліотеку.`);
+  if (!ok) return;
   const ids = new Set(exs.map(e => e.id));
   state.categories = state.categories.filter(c => c.id !== id);
   state.exercises = state.exercises.filter(e => e.categoryId !== id);
   Object.keys(state.logs).forEach(day => { ids.forEach(exId => delete state.logs[day]?.[exId]); if (!Object.keys(state.logs[day] || {}).length) delete state.logs[day]; });
   persistLibrary(); saveLogs(); renderAll(); toast('Розділ видалено');
+}
+
+function restoreDefaultLibrary() {
+  const existingCategoryIds = new Set(state.categories.map(c => c.id));
+  const existingExerciseIds = new Set(state.exercises.map(e => e.id));
+  for (const cat of DEFAULT_CATEGORIES) if (!existingCategoryIds.has(cat.id)) state.categories.push({...cat});
+  for (const ex of DEFAULT_EXERCISES) if (!existingExerciseIds.has(ex.id)) state.exercises.push({...ex});
+  persistLibrary(); renderAll(); toast('Стандартні розділи та вправи відновлено');
 }
 
 function bindCalendarControls() {
@@ -419,11 +563,16 @@ function deleteLogEntry(exerciseId,date) {
   saveLogs(); renderAll(); toast('Запис видалено');
 }
 
+function renderSettingsUI() {
+  $('#daily-goal-input').value = state.settings.dailyGoal;
+}
+
 function renderSummary() {
   const allDays=Object.keys(state.logs), allReps=allDays.reduce((sum,day)=>sum+dayTotal(day),0), activeDays=allDays.filter(day=>dayTotal(day)>0).length;
   const sorted=[...allDays].sort((a,b)=>dayTotal(b)-dayTotal(a)); const bestDay=sorted[0];
+  const current = currentStreak(), best = bestStreak();
   const topExercise=[...state.exercises].map(ex=>({ex,total:exerciseTotal(ex.id)})).sort((a,b)=>b.total-a.total)[0];
-  $('#summary-grid').innerHTML=`<div class="summary-card"><span class="summary-value">${allReps.toLocaleString('uk-UA')}</span><span class="summary-label">усі повторення</span></div><div class="summary-card"><span class="summary-value">${activeDays}</span><span class="summary-label">активних днів</span></div><div class="summary-card"><span class="summary-value">${bestDay?dayTotal(bestDay):0}</span><span class="summary-label">рекорд за день${bestDay?` · ${formatShortDate(bestDay)}`:''}</span></div><div class="summary-card"><span class="summary-value">${topExercise?.total||0}</span><span class="summary-label">топ вправа${topExercise?.total?` · ${escapeHtml(topExercise.ex.name)}`:''}</span></div>`;
+  $('#summary-grid').innerHTML=`<div class="summary-card"><span class="summary-value">${current}</span><span class="summary-label">🔥 поточний streak</span></div><div class="summary-card"><span class="summary-value">${best}</span><span class="summary-label">🏆 найкращий streak</span></div><div class="summary-card"><span class="summary-value">${allReps.toLocaleString('uk-UA')}</span><span class="summary-label">усі повторення</span></div><div class="summary-card"><span class="summary-value">${activeDays}</span><span class="summary-label">активних днів</span></div><div class="summary-card"><span class="summary-value">${bestDay?dayTotal(bestDay):0}</span><span class="summary-label">рекорд за день${bestDay?` · ${formatShortDate(bestDay)}`:''}</span></div><div class="summary-card"><span class="summary-value">${topExercise?.total||0}</span><span class="summary-label">топ вправа${topExercise?.total?` · ${escapeHtml(topExercise.ex.name)}`:''}</span></div>`;
 
   const totals=[...state.exercises].map(ex=>({ex,total:exerciseTotal(ex.id)})).filter(item=>item.total>0).sort((a,b)=>b.total-a.total); const max=Math.max(...totals.map(x=>x.total),1);
   $('#exercise-summary').innerHTML=totals.length?totals.map(item=>`<div class="summary-row"><div class="summary-main"><div class="summary-row-top"><strong>${escapeHtml(item.ex.name)}</strong><span>${item.total}</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.round((item.total/max)*100)}%"></div></div></div></div>`).join(''):'<p class="muted">Поки немає статистики. Додай перший підхід.</p>';

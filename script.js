@@ -3,6 +3,34 @@ const DEFAULT_CATEGORIES = [
   { id: 'pullups', name: 'Підтягування', icon: '↑', custom: false }
 ];
 
+
+const ICON_OPTIONS = [
+  ['icons/push-up.svg','Віджимання'], ['icons/pull-up.svg','Підтягування'],
+  ['icons/diamond.svg','Алмаз'], ['icons/wide.svg','Широкий хват'],
+  ['icons/incline.svg','Від опори'], ['icons/shoulders.svg','Плечі'],
+  ['icons/abs.svg','Прес'], ['icons/legs.svg','Ноги'],
+  ['icons/neck.svg','Шия'], ['icons/stretch.svg','Розтяжка'],
+  ['icons/cardio.svg','Кардіо'], ['icons/custom.svg','Інше']
+];
+
+function iconHtml(value, cls='icon-image') {
+  const v = String(value || '');
+  if (v.endsWith('.svg') || v.includes('/')) return `<img class="${cls}" src="${escapeHtml(v)}" alt="" draggable="false">`;
+  return escapeHtml(v || '✦');
+}
+
+function populateIconPicker(containerId, inputId, selectedValue='icons/custom.svg') {
+  const root = document.getElementById(containerId);
+  const input = document.getElementById(inputId);
+  if (!root || !input) return;
+  input.value = selectedValue || 'icons/custom.svg';
+  root.innerHTML = ICON_OPTIONS.map(([src,label]) => `<button type="button" class="icon-choice ${src===input.value?'selected':''}" data-icon-value="${src}" title="${escapeHtml(label)}"><img src="${src}" alt="${escapeHtml(label)}" draggable="false"><span>${escapeHtml(label)}</span></button>`).join('');
+  root.querySelectorAll('[data-icon-value]').forEach(btn => btn.addEventListener('click', () => {
+    input.value = btn.dataset.iconValue;
+    root.querySelectorAll('.icon-choice').forEach(x => x.classList.toggle('selected', x===btn));
+  }));
+}
+
 const DEFAULT_EXERCISES = [
   { id: 'push-standard', name: 'Класичні віджимання', categoryId: 'pushups', icon: '▱', hint: 'База', custom: false },
   { id: 'push-wide', name: 'Віджимання широким хватом', categoryId: 'pushups', icon: '↔', hint: 'Груди', custom: false },
@@ -140,147 +168,137 @@ function setupLiquidNav(isIPhone) {
   const items = nav ? [...nav.querySelectorAll('.nav-item')] : [];
   if (!nav || !lens || !isIPhone || !items.length) return;
 
+  let pressed = false;
+  let pointerId = null;
   let raf = 0;
   let targetX = 0;
   let currentX = 0;
   let targetW = 0;
   let currentW = 0;
-  let pressed = false;
-  let pressedItem = null;
+  let targetScale = 1;
+  let currentScale = 1;
+  let hoveredIndex = -1;
 
-  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-  function navMetrics() {
+  function metrics() {
     const rect = nav.getBoundingClientRect();
     return { rect, slot: rect.width / items.length };
   }
 
-  function setLensToItem(item, options = {}) {
+  function setTargetForItem(item, snap = false) {
     if (!item) return;
-    const { rect } = navMetrics();
+    const { rect } = metrics();
     const r = item.getBoundingClientRect();
-    const x = r.left - rect.left + 4;
-    const w = Math.max(52, r.width - 8);
-    targetX = x;
-    targetW = w;
-    if (options.snap) {
-      currentX = x;
-      currentW = w;
-      lens.style.setProperty('--lens-x', `${x}px`);
-      lens.style.setProperty('--lens-w', `${w}px`);
+    targetW = Math.max(52, r.width - 8);
+    targetX = r.left - rect.left + 4;
+    targetScale = 1;
+    if (snap) {
+      currentX = targetX;
+      currentW = targetW;
+      currentScale = 1;
+      renderGlass();
     }
   }
 
-  function moveLens(clientX, clientY, { dragging = false } = {}) {
-    const { rect, slot } = navMetrics();
-    const x = clamp(clientX - rect.left, 8, rect.width - 8);
-    const index = clamp(Math.floor((x - 4) / slot), 0, items.length - 1);
+  function renderGlass() {
+    lens.style.transform = `translate3d(${currentX.toFixed(2)}px,0,0) scale(${currentScale.toFixed(3)})`;
+    lens.style.width = `${currentW.toFixed(2)}px`;
+  }
+
+  function tick() {
+    raf = 0;
+    const dx = targetX - currentX;
+    const dw = targetW - currentW;
+    const ds = targetScale - currentScale;
+    currentX += dx * 0.32;
+    currentW += dw * 0.32;
+    currentScale += ds * 0.28;
+    renderGlass();
+    if (Math.abs(dx) > 0.15 || Math.abs(dw) > 0.15 || Math.abs(ds) > 0.002) raf = requestAnimationFrame(tick);
+  }
+
+  function schedule() {
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+
+  function itemAt(clientX) {
+    const { rect, slot } = metrics();
+    const x = clamp(clientX - rect.left, 0, rect.width - 1);
+    return items[clamp(Math.floor(x / slot), 0, items.length - 1)];
+  }
+
+  function moveTo(clientX, dragging) {
+    const { rect, slot } = metrics();
+    const x = clamp(clientX - rect.left, 0, rect.width - 1);
+    const index = clamp(Math.floor(x / slot), 0, items.length - 1);
     const item = items[index];
-    const ir = item.getBoundingClientRect();
+    const r = item.getBoundingClientRect();
+    const center = r.left - rect.left + r.width / 2;
+    const offset = clamp(x - center, -36, 36);
+    const stretch = dragging ? clamp(Math.abs(offset) * 0.20, 0, 10) : 0;
+    targetW = Math.max(52, r.width - 8 + stretch);
+    targetX = clamp(center - targetW / 2 + offset * 0.18, 4, rect.width - targetW - 4);
+    targetScale = dragging ? 1.045 : 1;
 
-    const pointerLocal = x;
-    const baseX = ir.left - rect.left + 4;
-    const distance = pointerLocal - (ir.left - rect.left + ir.width / 2);
-    const stretch = clamp(Math.abs(distance) * 0.55, 0, 20);
-    const w = Math.max(52, ir.width - 8 + stretch);
-    const center = pointerLocal - (distance * 0.12);
-
-    targetW = dragging ? w : Math.max(52, ir.width - 8);
-    targetX = clamp(center - targetW / 2, 4, rect.width - targetW - 4);
-
-    lens.style.setProperty('--pointer-x', `${clamp(((clientX - rect.left) / rect.width) * 100, 0, 100)}%`);
-    lens.style.setProperty('--pointer-y', `${clamp(((clientY - rect.top) / rect.height) * 100, 0, 100)}%`);
-    lens.classList.add('is-moving');
-
-    items.forEach((navItem, i) => navItem.classList.toggle('is-hovered', i === index));
-    if (dragging) pressedItem = item;
+    if (hoveredIndex !== index) {
+      items.forEach((el, i) => el.classList.toggle('is-hovered', i === index));
+      hoveredIndex = index;
+    }
     return item;
   }
 
-  function animate() {
-    currentX += (targetX - currentX) * 0.24;
-    currentW += (targetW - currentW) * 0.24;
-    lens.style.setProperty('--lens-x', `${currentX}px`);
-    lens.style.setProperty('--lens-w', `${currentW}px`);
-    if (Math.abs(targetX - currentX) > 0.1 || Math.abs(targetW - currentW) > 0.1) {
-      raf = requestAnimationFrame(animate);
-    } else {
-      raf = 0;
-    }
-  }
-
-  function startAnimation() {
-    if (!raf) raf = requestAnimationFrame(animate);
-  }
-
-  function settle() {
-    const active = nav.querySelector('.nav-item.active') || items[0];
-    setLensToItem(active, { snap: false });
-    lens.classList.remove('is-moving');
-    lens.classList.add('is-settling');
-    items.forEach(item => item.classList.remove('is-hovered'));
-    startAnimation();
-    window.setTimeout(() => lens.classList.remove('is-settling'), 380);
-  }
-
   function pointerDown(e) {
+    if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
     pressed = true;
+    pointerId = e.pointerId;
+    nav.setPointerCapture?.(pointerId);
     nav.classList.add('is-pressed');
-    const item = moveLens(e.clientX, e.clientY, { dragging: true });
-    pressedItem = item;
     lens.classList.add('is-pressed');
-    startAnimation();
+    lens.style.transition = 'none';
+    moveTo(e.clientX, true);
+    schedule();
+    e.preventDefault();
   }
 
   function pointerMove(e) {
-    if (e.pointerType === 'mouse' && !pressed) {
-      moveLens(e.clientX, e.clientY, { dragging: false });
-      startAnimation();
-      return;
-    }
-    if (!pressed) return;
+    if (!pressed || e.pointerId !== pointerId) return;
     e.preventDefault();
-    moveLens(e.clientX, e.clientY, { dragging: true });
-    startAnimation();
+    moveTo(e.clientX, true);
+    schedule();
   }
 
   function pointerUp(e) {
-    if (!pressed) return;
+    if (!pressed || e.pointerId !== pointerId) return;
+    const item = itemAt(e.clientX);
     pressed = false;
+    pointerId = null;
+    nav.releasePointerCapture?.(e.pointerId);
     nav.classList.remove('is-pressed');
     lens.classList.remove('is-pressed');
-    const item = moveLens(e.clientX, e.clientY, { dragging: true }) || pressedItem;
-    if (item) {
-      const isInside = nav.contains(document.elementFromPoint(e.clientX, e.clientY));
-      if (isInside) item.click();
-    }
-    settle();
-    pressedItem = null;
+    lens.style.transition = '';
+    if (item) item.click();
+    setTargetForItem(nav.querySelector('.nav-item.active') || items[0]);
+    targetScale = 1;
+    items.forEach(el => el.classList.remove('is-hovered'));
+    hoveredIndex = -1;
+    lens.classList.add('is-settling');
+    schedule();
+    window.setTimeout(() => lens.classList.remove('is-settling'), 320);
+    e.preventDefault();
   }
 
-  function leave() {
-    if (!pressed) settle();
-  }
-
-  // Pointer events give us one smooth interaction path for touch + mouse.
   nav.addEventListener('pointerdown', pointerDown, { passive: false });
   nav.addEventListener('pointermove', pointerMove, { passive: false });
   nav.addEventListener('pointerup', pointerUp, { passive: false });
   nav.addEventListener('pointercancel', pointerUp, { passive: false });
-  nav.addEventListener('pointerleave', leave, { passive: true });
-
-  // Do not let the long-press gesture select text or scroll the page while dragging the glass.
   nav.addEventListener('contextmenu', e => e.preventDefault());
   nav.addEventListener('selectstart', e => e.preventDefault());
 
-  window.addEventListener('resize', () => {
-    const active = nav.querySelector('.nav-item.active') || items[0];
-    setLensToItem(active, { snap: true });
-  });
+  window.addEventListener('resize', () => setTargetForItem(nav.querySelector('.nav-item.active') || items[0], true));
 
   setTimeout(() => {
-    const active = nav.querySelector('.nav-item.active') || items[0];
-    setLensToItem(active, { snap: true });
+    setTargetForItem(nav.querySelector('.nav-item.active') || items[0], true);
     lens.classList.add('ready');
   }, 40);
 }
@@ -423,6 +441,8 @@ function setBuilderMode(mode) {
   $('#builder-title').textContent = mode === 'category' ? 'Створи свій розділ' : 'Додай вправу до розділу';
   $('#builder-subtitle').textContent = mode === 'category' ? 'Наприклад: «Шия», «Прес», «Ноги» або будь-який твій комплекс.' : 'Спочатку створи розділ, а потім додай до нього скільки завгодно вправ.';
   if (mode === 'exercise') fillExerciseCategorySelect();
+  populateIconPicker('category-icon-picker','category-icon', $('#category-icon')?.value || 'icons/custom.svg');
+  populateIconPicker('exercise-icon-picker','exercise-icon', $('#exercise-icon')?.value || 'icons/custom.svg');
 }
 
 function fillExerciseCategorySelect() {
@@ -459,7 +479,7 @@ function createExercise() {
   persistLibrary();
   $('#exercise-name').value = '';
   $('#exercise-hint').value = '';
-  $('#exercise-icon').value = '';
+  populateIconPicker('exercise-icon-picker','exercise-icon','icons/custom.svg');
   closeBuilder();
   renderAll();
   toast(`Вправу «${name}» додано`);
@@ -502,7 +522,7 @@ function renderGoalUI(total = dayTotal(state.selectedDate)) {
   $('#best-streak-inline').textContent = `Рекорд: ${bestStreak()} ${pluralDays(bestStreak())}`;
 }
 
-function renderAll() { renderHome(); renderExercises(); renderCalendar(); renderSummary(); }
+function renderAll() { renderHome(); renderExercises(); renderCalendar(); renderSummary(); renderHeatmap(); }
 
 function renderHome() {
   const total = dayTotal(state.selectedDate);
@@ -515,7 +535,7 @@ function renderHome() {
     const cat = categoryById(exercise.categoryId);
     const amount = Number(dayData(state.selectedDate)[exercise.id] || 0);
     return `<button class="exercise-card hover-lift" data-exercise-id="${exercise.id}">
-      <div><div class="exercise-icon">${escapeHtml(exercise.icon || '✦')}</div><div class="exercise-name">${escapeHtml(exercise.name)}</div></div>
+      <div><div class="exercise-icon">${iconHtml(exercise.icon || '✦')}</div><div class="exercise-name">${escapeHtml(exercise.name)}</div></div>
       <div class="exercise-meta">${escapeHtml(cat?.name || '')} · ${amount} сьогодні</div>
     </button>`;
   }).join('') : '<div class="empty-card">Створи першу вправу у розділі «Вправи».</div>';
@@ -541,7 +561,7 @@ function renderExercises() {
     const exercises = exercisesInCategory(category.id);
     return `<section class="exercise-section" data-category="${category.id}">
       <div class="section-headline">
-        <div class="section-title-wrap"><span class="section-icon">${escapeHtml(category.icon || '◉')}</span><div><h3>${escapeHtml(category.name)}</h3><span>${exercises.length} ${exercises.length === 1 ? 'вправа' : exercises.length < 5 ? 'вправи' : 'вправ'}</span></div></div>
+        <div class="section-title-wrap"><span class="drag-handle" title="Перетягни для зміни порядку">⋮⋮</span><span class="section-icon">${iconHtml(category.icon || '◉')}</span><div><h3>${escapeHtml(category.name)}</h3><span>${exercises.length} ${exercises.length === 1 ? 'вправа' : exercises.length < 5 ? 'вправи' : 'вправ'}</span></div></div>
         <div class="section-actions">
           <button class="mini-add" data-add-section="${category.id}" title="Додати вправу" aria-label="Додати вправу до розділу ${escapeHtml(category.name)}">＋</button>
           <button class="mini-more" data-section-menu="${category.id}" title="Керування розділом" aria-label="Керування розділом">•••</button>
@@ -550,7 +570,7 @@ function renderExercises() {
       <div class="exercise-list">${exercises.length ? exercises.map(ex => {
         const amount = Number(dayData(state.selectedDate)[ex.id] || 0);
         return `<div class="exercise-row hover-lift">
-          <button class="exercise-row-main" data-log-id="${ex.id}"><span class="row-icon">${escapeHtml(ex.icon || '✦')}</span><span><b>${escapeHtml(ex.name)}</b><small>${escapeHtml(ex.hint || '')} · ${amount} сьогодні</small></span></button>
+          <span class="drag-handle row-drag" title="Перетягни для зміни порядку">⋮⋮</span><button class="exercise-row-main" data-log-id="${ex.id}"><span class="row-icon">${iconHtml(ex.icon || '✦')}</span><span><b>${escapeHtml(ex.name)}</b><small>${escapeHtml(ex.hint || '')} · ${amount} сьогодні</small></span></button>
           <div class="row-actions"><button class="add-small" data-add-id="${ex.id}" aria-label="Додати ${escapeHtml(ex.name)}">＋</button><button class="exercise-more" data-exercise-menu="${ex.id}" title="Дії з вправою" aria-label="Дії з вправою">•••</button></div>
         </div>`;
       }).join('') : '<div class="empty-inline">У цьому розділі поки немає вправ.</div>'}</div>
@@ -562,7 +582,73 @@ function renderExercises() {
   $$('#exercise-sections [data-add-section]').forEach(btn => btn.addEventListener('click', () => { openBuilder('exercise'); $('#exercise-category').value = btn.dataset.addSection; }));
   $$('#exercise-sections [data-exercise-menu]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openExerciseMenu(btn.dataset.exerciseMenu, btn); }));
   $$('#exercise-sections [data-section-menu]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openCategoryMenu(btn.dataset.sectionMenu, btn); }));
+  bindDragDrop();
   $('#restore-defaults-inline')?.addEventListener('click', restoreDefaultLibrary);
+}
+
+function bindDragDrop() {
+  $$('#exercise-sections .exercise-section').forEach(section => {
+    section.draggable = true;
+    section.addEventListener('dragstart', e => { e.dataTransfer.setData('text/category', section.dataset.category); section.classList.add('dragging'); });
+    section.addEventListener('dragend', () => section.classList.remove('dragging'));
+    section.addEventListener('dragover', e => e.preventDefault());
+    section.addEventListener('drop', e => {
+      e.preventDefault();
+      const id = e.dataTransfer.getData('text/category'); if (!id || id === section.dataset.category) return;
+      const from = state.categories.findIndex(c=>c.id===id), to = state.categories.findIndex(c=>c.id===section.dataset.category); if (from<0 || to<0) return;
+      const [moved] = state.categories.splice(from,1); state.categories.splice(to,0,moved); persistLibrary(); renderExercises();
+      toast('Розділи впорядковано');
+    });
+  });
+  enableTouchReorder();
+  $$('#exercise-sections .exercise-row').forEach(row => {
+    row.draggable = true;
+    row.addEventListener('dragstart', e => { e.dataTransfer.setData('text/exercise', row.querySelector('[data-log-id]')?.dataset.logId || ''); row.classList.add('dragging'); });
+    row.addEventListener('dragend', () => row.classList.remove('dragging'));
+    row.addEventListener('dragover', e => e.preventDefault());
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      const movingId = e.dataTransfer.getData('text/exercise'); const targetId = row.querySelector('[data-log-id]')?.dataset.logId; if(!movingId || !targetId || movingId===targetId) return;
+      const moving = exerciseById(movingId), target = exerciseById(targetId); if(!moving || !target || moving.categoryId !== target.categoryId) return;
+      const same = state.exercises.filter(x=>x.categoryId===moving.categoryId); const from = same.findIndex(x=>x.id===movingId), to = same.findIndex(x=>x.id===targetId);
+      const ids = same.map(x=>x.id); const [id] = ids.splice(from,1); ids.splice(to,0,id);
+      const reordered=[]; ids.forEach(i=>reordered.push(exerciseById(i)));
+      const rest=state.exercises.filter(x=>x.categoryId!==moving.categoryId);
+      const firstIndex=Math.min(...state.exercises.map((x,i)=>x.categoryId===moving.categoryId?i:999999));
+      rest.splice(firstIndex===999999?rest.length:firstIndex,0,...reordered);
+      state.exercises=rest; persistLibrary(); renderExercises(); toast('Вправи впорядковано');
+    });
+  });
+}
+
+function enableTouchReorder() {
+  const attach = (selector, type) => {
+    $$(selector).forEach(el => {
+      const handle = el.querySelector(type === 'exercise' ? '.row-drag' : '.drag-handle');
+      if (!handle) return;
+      let timer=null, dragging=false, currentTarget=null;
+      const cleanup=()=>{ if(timer){clearTimeout(timer);timer=null;} if(dragging){el.classList.remove('touch-dragging'); document.body.classList.remove('touch-reordering');} dragging=false; currentTarget=null; };
+      handle.addEventListener('pointerdown', e=>{
+        if(e.pointerType==='mouse') return;
+        e.preventDefault();
+        timer=setTimeout(()=>{ dragging=true; el.classList.add('touch-dragging'); document.body.classList.add('touch-reordering'); handle.setPointerCapture?.(e.pointerId); }, 350);
+      });
+      handle.addEventListener('pointermove', e=>{
+        if(!dragging) return;
+        const under=document.elementFromPoint(e.clientX,e.clientY)?.closest(type==='exercise'?'.exercise-row':'.exercise-section');
+        if(!under || under===el || (type==='exercise' && under.closest('.exercise-section')!==el.closest('.exercise-section'))) return;
+        if(under===currentTarget) return;
+        currentTarget=under;
+        const rect=under.getBoundingClientRect();
+        const before=e.clientY < rect.top + rect.height/2;
+        el.parentElement.insertBefore(el, before?under:under.nextSibling);
+      });
+      handle.addEventListener('pointerup', ()=>{ if(timer){clearTimeout(timer);timer=null;} if(dragging){ if(type==='exercise'){ const ids=[...el.closest('.exercise-list').querySelectorAll('.exercise-row [data-log-id]')].map(b=>b.dataset.logId); const catId=el.closest('.exercise-section').dataset.category; state.exercises=state.exercises.filter(x=>x.categoryId!==catId); const inserted=ids.map(id=>exerciseById(id)).filter(Boolean); const idx=state.exercises.findIndex(x=>x.categoryId===catId); if(idx<0) state.exercises.push(...inserted); else state.exercises.splice(idx,0,...inserted); } else { state.categories=[...document.querySelectorAll('.exercise-section')].map(sec=>categoryById(sec.dataset.category)).filter(Boolean); } persistLibrary(); renderExercises(); toast('Порядок збережено'); } cleanup(); });
+      handle.addEventListener('pointercancel', cleanup);
+    });
+  };
+  attach('#exercise-sections .exercise-section','category');
+  attach('#exercise-sections .exercise-row','exercise');
 }
 
 function openCategoryMenu(id, anchor) {
@@ -612,6 +698,7 @@ function openExerciseMenu(id, anchor) {
   menu.className = 'exercise-menu category-menu';
   menu.innerHTML = `
     <button data-menu-log>＋ Додати повторення</button>
+    <button data-menu-history>↗ Історія вправи</button>
     <button class="danger-menu" data-menu-delete>🗑 Видалити вправу</button>`;
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
@@ -621,6 +708,10 @@ function openExerciseMenu(id, anchor) {
   menu.querySelector('[data-menu-log]').addEventListener('click', () => {
     closeExerciseMenu();
     openLogModal(ex);
+  });
+  menu.querySelector('[data-menu-history]').addEventListener('click', () => {
+    closeExerciseMenu();
+    openExerciseHistory(ex.id);
   });
   menu.querySelector('[data-menu-delete]').addEventListener('click', () => {
     closeExerciseMenu();
@@ -688,6 +779,28 @@ function renderCalendar() {
   renderDayDetail();
 }
 
+function renderHeatmap() {
+  const grid = $('#heatmap-grid'); const months = $('#heatmap-months'); const totalBadge = $('#heatmap-total');
+  if (!grid || !months || !totalBadge) return;
+  const end = new Date(state.selectedDate + 'T12:00:00');
+  const start = new Date(end); start.setDate(start.getDate() - 90);
+  const monday = new Date(start); monday.setDate(monday.getDate() - ((monday.getDay()+6)%7));
+  const totalDays = 13 * 7;
+  const cells=[]; let total=0; const monthLabels=[]; let lastMonth=-1;
+  for(let i=0;i<totalDays;i++){
+    const d=new Date(monday); d.setDate(monday.getDate()+i); const key=localDateKey(d); const reps=dayTotal(key); total+=reps;
+    const goal=Math.max(1,Number(state.settings.dailyGoal||50));
+    const ratio=reps/goal;
+    const level=reps===0?0:ratio<0.25?1:ratio<0.5?2:ratio<1?3:4;
+    cells.push({key,reps,level,d});
+    if(d.getDate()<=7 && d.getMonth()!==lastMonth){ lastMonth=d.getMonth(); monthLabels.push({col:Math.floor(i/7)+1,label:d.toLocaleDateString('uk-UA',{month:'short'}).replace('.','')}); }
+  }
+  grid.innerHTML=cells.map(c=>`<button class="heatmap-cell level-${c.level} ${c.key===state.selectedDate?'selected':''}" data-date="${c.key}" aria-label="${escapeHtml(formatShortDate(c.key))}: ${c.reps} повторень" title="${escapeHtml(formatShortDate(c.key))}: ${c.reps} повторень"></button>`).join('');
+  months.innerHTML=monthLabels.map(x=>`<span style="grid-column:${x.col}">${escapeHtml(x.label)}</span>`).join('');
+  totalBadge.textContent=total.toLocaleString('uk-UA');
+  $$('#heatmap-grid [data-date]').forEach(cell=>cell.addEventListener('click',()=>{ state.selectedDate=cell.dataset.date; state.calendarDate=parseDate(cell.dataset.date); renderCalendar(); renderHome(); renderExercises(); renderHeatmap(); }));
+}
+
 function renderDayDetail() {
   const entries=Object.entries(dayData(state.selectedDate)).filter(([,reps])=>Number(reps)>0);
   if (!entries.length) { $('#day-detail').className='day-detail empty'; $('#day-detail').innerHTML=`<div><strong>${escapeHtml(formatFullDate(state.selectedDate))}</strong><p class="muted" style="margin-top:5px">У цей день ще немає записів.</p></div>`; return; }
@@ -696,18 +809,57 @@ function renderDayDetail() {
   $('#day-detail').innerHTML=`<div class="detail-head"><div><p class="eyebrow">Обраний день</p><strong>${escapeHtml(formatFullDate(state.selectedDate))}</strong></div><div class="detail-total">${total}</div></div>${entries.map(([id,reps])=>{
     const ex=exerciseById(id); if(!ex) return '';
     const cat=categoryById(ex.categoryId);
-    return `<div class="detail-row"><div><div class="detail-name">${escapeHtml(ex.name)}</div><div class="detail-type">${escapeHtml(cat?.name||'Вправа')}</div></div><div class="detail-actions"><button class="detail-edit" data-edit-log="${ex.id}">${Number(reps)}</button><button class="detail-delete" data-delete-log="${ex.id}" aria-label="Видалити запис">×</button></div></div>`;
+    return `<div class="detail-row swipe-row" data-swipe-id="${ex.id}"><div class="swipe-actions"><button class="swipe-edit" data-swipe-edit="${ex.id}">Редагувати</button><button class="swipe-delete" data-swipe-delete="${ex.id}">Видалити</button></div><div class="swipe-content"><div><div class="detail-name">${escapeHtml(ex.name)}</div><div class="detail-type">${escapeHtml(cat?.name||'Вправа')}</div></div><div class="detail-actions"><button class="detail-edit" data-edit-log="${ex.id}">${Number(reps)}</button></div></div></div>`;
   }).join('')}`;
   $$('#day-detail [data-edit-log]').forEach(btn=>btn.addEventListener('click',()=>openLogModal(exerciseById(btn.dataset.editLog))));
   $$('#day-detail [data-delete-log]').forEach(btn=>btn.addEventListener('click',()=>deleteLogEntry(btn.dataset.deleteLog,state.selectedDate)));
+  bindSwipeRows();
 }
 
+function bindSwipeRows() {
+  $$('#day-detail .swipe-row').forEach(row => {
+    let startX=0, startY=0, moved=false;
+    row.addEventListener('touchstart', e => { const t=e.touches[0]; startX=t.clientX; startY=t.clientY; moved=false; }, {passive:true});
+    row.addEventListener('touchmove', e => { const t=e.touches[0]; const dx=t.clientX-startX, dy=t.clientY-startY; if(Math.abs(dx)>12 && Math.abs(dx)>Math.abs(dy)){ moved=true; row.classList.toggle('swiped', dx < -48); } }, {passive:true});
+    row.addEventListener('touchend', () => { if(!moved) row.classList.remove('swiped'); });
+  });
+  $$('#day-detail [data-swipe-edit]').forEach(btn=>btn.addEventListener('click',()=>{ const ex=exerciseById(btn.dataset.swipeEdit); if(ex) openLogModal(ex); }));
+  $$('#day-detail [data-swipe-delete]').forEach(btn=>btn.addEventListener('click',()=>deleteLogEntry(btn.dataset.swipeDelete,state.selectedDate)));
+}
+
+
+let lastDeletedLog = null;
 function deleteLogEntry(exerciseId,date) {
-  const ex=exerciseById(exerciseId); if(!ex || !state.logs[date]?.[exerciseId]) return;
+  const ex=exerciseById(exerciseId); const reps = Number(state.logs[date]?.[exerciseId] || 0); if(!ex || !reps) return;
+  lastDeletedLog = { exerciseId, date, reps };
   delete state.logs[date][exerciseId];
   if(!Object.keys(state.logs[date]).length) delete state.logs[date];
-  saveLogs(); renderAll(); toast('Запис видалено');
+  saveLogs(); renderAll();
+  toastWithAction('Запис видалено', 'Скасувати', undoDelete);
 }
+function undoDelete() {
+  if (!lastDeletedLog) return;
+  const { exerciseId, date, reps } = lastDeletedLog;
+  if (!state.logs[date]) state.logs[date] = {};
+  state.logs[date][exerciseId] = reps;
+  saveLogs(); renderAll(); lastDeletedLog = null; toast('Запис повернуто');
+}
+
+function openExerciseHistory(exerciseId) {
+  const ex = exerciseById(exerciseId); if (!ex) return;
+  const cat = categoryById(ex.categoryId);
+  $('#history-title').textContent = ex.name;
+  $('#history-subtitle').textContent = `${cat?.name || 'Вправа'} · історія повторень`;
+  const records = Object.entries(state.logs).map(([date, day]) => ({ date, reps: Number(day?.[exerciseId] || 0) })).filter(x => x.reps > 0).sort((a,b) => b.date.localeCompare(a.date));
+  const total = records.reduce((s,x)=>s+x.reps,0);
+  const best = records.reduce((m,x)=>Math.max(m,x.reps),0);
+  const avg = records.length ? Math.round(total / records.length) : 0;
+  $('#history-stats').innerHTML = `<div><b>${total.toLocaleString('uk-UA')}</b><small>всього</small></div><div><b>${best}</b><small>рекорд за день</small></div><div><b>${avg}</b><small>середнє</small></div>`;
+  $('#history-list').innerHTML = records.length ? records.map(x => `<button class="history-row" data-history-date="${x.date}"><span>${escapeHtml(formatFullDate(x.date))}</span><strong>${x.reps}</strong></button>`).join('') : '<div class="empty-inline">Для цієї вправи ще немає записів.</div>';
+  $('#history-list').querySelectorAll('[data-history-date]').forEach(btn => btn.addEventListener('click', () => { state.selectedDate = btn.dataset.historyDate; state.calendarDate = parseDate(btn.dataset.historyDate); closeHistoryModal(); showScreen('calendar'); }));
+  $('#history-modal').classList.remove('hidden');
+}
+function closeHistoryModal() { $('#history-modal').classList.add('hidden'); }
 
 function renderSummary() {
   const allDays=Object.keys(state.logs), allReps=allDays.reduce((sum,day)=>sum+dayTotal(day),0), activeDays=allDays.filter(day=>dayTotal(day)>0).length;
@@ -721,9 +873,15 @@ function renderSummary() {
 }
 
 function toast(text) {
+  toastWithAction(text, null, null, 1800);
+}
+function toastWithAction(text, actionLabel, actionFn, duration=4500) {
   const existing=$('.toast'); if(existing) existing.remove();
-  const el=document.createElement('div'); el.className='toast'; el.textContent=text; document.body.appendChild(el);
-  requestAnimationFrame(()=>el.classList.add('show')); setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),220);},1800);
+  const el=document.createElement('div'); el.className='toast';
+  el.innerHTML = `<span>${escapeHtml(text)}</span>${actionLabel ? `<button type="button" class="toast-action">${escapeHtml(actionLabel)}</button>` : ''}`;
+  document.body.appendChild(el);
+  if (actionLabel) el.querySelector('.toast-action').addEventListener('click', () => { actionFn?.(); el.remove(); });
+  requestAnimationFrame(()=>el.classList.add('show')); setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),220);},duration);
 }
 
 init();

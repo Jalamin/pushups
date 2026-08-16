@@ -17,6 +17,7 @@
       <div>
         <p class="eyebrow">Твій тренувальний журнал</p>
         <h1>RepTrack</h1>
+        <span class="network-status" id="network-status">Онлайн</span>
       </div>
       <button class="icon-btn" id="theme-toggle" aria-label="Змінити тему" title="Змінити тему">☼</button>
     </header>
@@ -101,6 +102,24 @@
           <div class="calendar-grid" id="calendar-grid"></div>
         </div>
 
+        <div class="heatmap-card stats-card">
+          <div class="section-heading tight">
+            <div>
+              <p class="eyebrow">Активність</p>
+              <h2>Heatmap</h2>
+            </div>
+            <span class="badge" id="heatmap-total">0</span>
+          </div>
+          <div class="heatmap-wrap">
+            <div class="heatmap-months" id="heatmap-months" aria-hidden="true"></div>
+            <div class="heatmap-body">
+              <div class="heatmap-weekdays" aria-hidden="true"><span>Пн</span><span>Ср</span><span>Пт</span></div>
+              <div class="heatmap-grid" id="heatmap-grid"></div>
+            </div>
+          </div>
+          <div class="heatmap-legend"><span>Менше</span><i data-level="0"></i><i data-level="1"></i><i data-level="2"></i><i data-level="3"></i><i data-level="4"></i><span>Більше</span></div>
+        </div>
+
         <div class="day-detail" id="day-detail"></div>
       </section>
 
@@ -157,6 +176,18 @@
     </div>
   </div>
 
+  <!-- Exercise history modal -->
+  <div class="modal-backdrop hidden" id="history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
+    <div class="modal slide-up wide-modal">
+      <button class="modal-close" id="history-close" aria-label="Закрити">×</button>
+      <p class="eyebrow">Історія вправи</p>
+      <h2 id="history-title">Вправа</h2>
+      <p class="muted" id="history-subtitle"></p>
+      <div class="history-stats" id="history-stats"></div>
+      <div class="history-list" id="history-list"></div>
+    </div>
+  </div>
+
   <!-- Builder modal -->
   <div class="modal-backdrop hidden" id="builder-modal" role="dialog" aria-modal="true" aria-labelledby="builder-title">
     <div class="modal slide-up">
@@ -172,7 +203,9 @@
 
       <div id="category-form" class="builder-form">
         <label class="field-label">Назва розділу<input id="category-name" type="text" maxlength="32" placeholder="Наприклад, Шия" /></label>
-        <label class="field-label">Іконка<input id="category-icon" type="text" maxlength="2" placeholder="◉" /></label>
+        <label class="field-label">Іконка</label>
+        <div class="icon-picker" id="category-icon-picker"></div>
+        <input id="category-icon" type="hidden" value="icons/custom.svg" />
         <button class="primary-btn" id="save-category">Створити розділ</button>
       </div>
 
@@ -180,7 +213,9 @@
         <label class="field-label">Назва вправи<input id="exercise-name" type="text" maxlength="50" placeholder="Наприклад, Нахили шиї" /></label>
         <label class="field-label">Розділ<select id="exercise-category"></select></label>
         <label class="field-label">Підказка<input id="exercise-hint" type="text" maxlength="40" placeholder="Наприклад, 3 підходи" /></label>
-        <label class="field-label">Іконка<input id="exercise-icon" type="text" maxlength="2" placeholder="↕" /></label>
+        <label class="field-label">Іконка</label>
+        <div class="icon-picker" id="exercise-icon-picker"></div>
+        <input id="exercise-icon" type="hidden" value="icons/custom.svg" />
         <button class="primary-btn" id="save-exercise">Створити вправу</button>
       </div>
     </div>

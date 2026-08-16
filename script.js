@@ -137,40 +137,152 @@ function setupMobileUX() {
 function setupLiquidNav(isIPhone) {
   const nav = document.querySelector('.bottom-nav');
   const lens = nav?.querySelector('.liquid-lens');
-  if (!nav || !lens || !isIPhone) return;
-  const moveLens = (clientX) => {
+  const items = nav ? [...nav.querySelectorAll('.nav-item')] : [];
+  if (!nav || !lens || !isIPhone || !items.length) return;
+
+  let raf = 0;
+  let targetX = 0;
+  let currentX = 0;
+  let targetW = 0;
+  let currentW = 0;
+  let pressed = false;
+  let pressedItem = null;
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+  function navMetrics() {
     const rect = nav.getBoundingClientRect();
-    const items = [...nav.querySelectorAll('.nav-item')];
-    const index = Math.max(0, Math.min(items.length - 1, Math.floor((clientX - rect.left) / (rect.width / items.length))));
-    const item = items[index];
+    return { rect, slot: rect.width / items.length };
+  }
+
+  function setLensToItem(item, options = {}) {
     if (!item) return;
-    const ir = item.getBoundingClientRect();
-    lens.style.setProperty('--lens-x', `${ir.left - rect.left + 4}px`);
-    lens.style.setProperty('--lens-w', `${ir.width - 8}px`);
-    lens.classList.add('is-moving');
-    return item;
-  };
-  const settleLens = () => {
-    const active = nav.querySelector('.nav-item.active');
-    if (active) {
-      const rect = nav.getBoundingClientRect(), r = active.getBoundingClientRect();
-      lens.style.setProperty('--lens-x', `${r.left - rect.left + 4}px`);
-      lens.style.setProperty('--lens-w', `${r.width - 8}px`);
+    const { rect } = navMetrics();
+    const r = item.getBoundingClientRect();
+    const x = r.left - rect.left + 4;
+    const w = Math.max(52, r.width - 8);
+    targetX = x;
+    targetW = w;
+    if (options.snap) {
+      currentX = x;
+      currentW = w;
+      lens.style.setProperty('--lens-x', `${x}px`);
+      lens.style.setProperty('--lens-w', `${w}px`);
     }
+  }
+
+  function moveLens(clientX, clientY, { dragging = false } = {}) {
+    const { rect, slot } = navMetrics();
+    const x = clamp(clientX - rect.left, 8, rect.width - 8);
+    const index = clamp(Math.floor((x - 4) / slot), 0, items.length - 1);
+    const item = items[index];
+    const ir = item.getBoundingClientRect();
+
+    const pointerLocal = x;
+    const baseX = ir.left - rect.left + 4;
+    const distance = pointerLocal - (ir.left - rect.left + ir.width / 2);
+    const stretch = clamp(Math.abs(distance) * 0.55, 0, 20);
+    const w = Math.max(52, ir.width - 8 + stretch);
+    const center = pointerLocal - (distance * 0.12);
+
+    targetW = dragging ? w : Math.max(52, ir.width - 8);
+    targetX = clamp(center - targetW / 2, 4, rect.width - targetW - 4);
+
+    lens.style.setProperty('--pointer-x', `${clamp(((clientX - rect.left) / rect.width) * 100, 0, 100)}%`);
+    lens.style.setProperty('--pointer-y', `${clamp(((clientY - rect.top) / rect.height) * 100, 0, 100)}%`);
+    lens.classList.add('is-moving');
+
+    items.forEach((navItem, i) => navItem.classList.toggle('is-hovered', i === index));
+    if (dragging) pressedItem = item;
+    return item;
+  }
+
+  function animate() {
+    currentX += (targetX - currentX) * 0.24;
+    currentW += (targetW - currentW) * 0.24;
+    lens.style.setProperty('--lens-x', `${currentX}px`);
+    lens.style.setProperty('--lens-w', `${currentW}px`);
+    if (Math.abs(targetX - currentX) > 0.1 || Math.abs(targetW - currentW) > 0.1) {
+      raf = requestAnimationFrame(animate);
+    } else {
+      raf = 0;
+    }
+  }
+
+  function startAnimation() {
+    if (!raf) raf = requestAnimationFrame(animate);
+  }
+
+  function settle() {
+    const active = nav.querySelector('.nav-item.active') || items[0];
+    setLensToItem(active, { snap: false });
     lens.classList.remove('is-moving');
-  };
-  nav.addEventListener('touchmove', (e) => {
-    const item = moveLens(e.touches[0].clientX);
-    if (item) { e.preventDefault(); }
-  }, { passive: false });
-  nav.addEventListener('touchend', (e) => {
-    const item = moveLens(e.changedTouches[0].clientX);
-    if (item) item.click();
-    setTimeout(settleLens, 30);
-  }, { passive: true });
-  nav.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') moveLens(e.clientX); });
-  window.addEventListener('resize', settleLens);
-  setTimeout(settleLens, 40);
+    lens.classList.add('is-settling');
+    items.forEach(item => item.classList.remove('is-hovered'));
+    startAnimation();
+    window.setTimeout(() => lens.classList.remove('is-settling'), 380);
+  }
+
+  function pointerDown(e) {
+    pressed = true;
+    nav.classList.add('is-pressed');
+    const item = moveLens(e.clientX, e.clientY, { dragging: true });
+    pressedItem = item;
+    lens.classList.add('is-pressed');
+    startAnimation();
+  }
+
+  function pointerMove(e) {
+    if (e.pointerType === 'mouse' && !pressed) {
+      moveLens(e.clientX, e.clientY, { dragging: false });
+      startAnimation();
+      return;
+    }
+    if (!pressed) return;
+    e.preventDefault();
+    moveLens(e.clientX, e.clientY, { dragging: true });
+    startAnimation();
+  }
+
+  function pointerUp(e) {
+    if (!pressed) return;
+    pressed = false;
+    nav.classList.remove('is-pressed');
+    lens.classList.remove('is-pressed');
+    const item = moveLens(e.clientX, e.clientY, { dragging: true }) || pressedItem;
+    if (item) {
+      const isInside = nav.contains(document.elementFromPoint(e.clientX, e.clientY));
+      if (isInside) item.click();
+    }
+    settle();
+    pressedItem = null;
+  }
+
+  function leave() {
+    if (!pressed) settle();
+  }
+
+  // Pointer events give us one smooth interaction path for touch + mouse.
+  nav.addEventListener('pointerdown', pointerDown, { passive: false });
+  nav.addEventListener('pointermove', pointerMove, { passive: false });
+  nav.addEventListener('pointerup', pointerUp, { passive: false });
+  nav.addEventListener('pointercancel', pointerUp, { passive: false });
+  nav.addEventListener('pointerleave', leave, { passive: true });
+
+  // Do not let the long-press gesture select text or scroll the page while dragging the glass.
+  nav.addEventListener('contextmenu', e => e.preventDefault());
+  nav.addEventListener('selectstart', e => e.preventDefault());
+
+  window.addEventListener('resize', () => {
+    const active = nav.querySelector('.nav-item.active') || items[0];
+    setLensToItem(active, { snap: true });
+  });
+
+  setTimeout(() => {
+    const active = nav.querySelector('.nav-item.active') || items[0];
+    setLensToItem(active, { snap: true });
+    lens.classList.add('ready');
+  }, 40);
 }
 
 function init() {
@@ -183,7 +295,7 @@ function init() {
   bindModal();
   bindBuilder();
   bindCalendarControls();
-  renderSettingsUI();
+  bindGoalEditor();
   $('#today-label').textContent = formatFullDate(state.selectedDate);
   $('#hero-streak').textContent = `🔥 ${currentStreak()} ${pluralDays(currentStreak())} поспіль`;
   renderAll();
@@ -206,13 +318,13 @@ function bindNavigation() {
   $('#fab-add').addEventListener('click', () => {
     if (state.exercises.length) openLogModal(state.exercises[0]);
   });
-  bindSettings();
 }
 
 function showScreen(name) {
   state.currentScreen = name;
   $$('.screen').forEach(screen => screen.classList.toggle('active', screen.id === `screen-${name}`));
   $$('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.screen === name));
+  document.body.classList.toggle('fab-home-only', name !== 'home');
   renderAll();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -230,19 +342,18 @@ function applyTheme(theme) {
   $('#theme-toggle').textContent = theme === 'dark' ? '☼' : '☾';
 }
 
-function bindSettings() {
-  $('#daily-goal-input').addEventListener('change', syncSettingsFromUI);
-  $('#save-settings').addEventListener('click', () => {
-    syncSettingsFromUI();
+function bindGoalEditor() {
+  $('#goal-edit')?.addEventListener('click', () => {
+    const current = Number(state.settings.dailyGoal || 50);
+    const value = window.prompt('Скільки повторень хочеш робити за день?', String(current));
+    if (value === null) return;
+    const goal = Math.min(99999, Math.max(1, Math.floor(Number(value))));
+    if (!Number.isFinite(goal)) { toast('Введи коректне число'); return; }
+    state.settings.dailyGoal = goal;
     saveSettings();
     renderAll();
-    toast('Ціль збережено');
+    toast(`Денну ціль змінено: ${goal} повторень`);
   });
-}
-
-function syncSettingsFromUI() {
-  const goal = Math.max(1, Math.floor(Number($('#daily-goal-input').value || 50)));
-  state.settings.dailyGoal = Math.min(99999, goal);
 }
 
 function bindModal() {
@@ -391,7 +502,7 @@ function renderGoalUI(total = dayTotal(state.selectedDate)) {
   $('#best-streak-inline').textContent = `Рекорд: ${bestStreak()} ${pluralDays(bestStreak())}`;
 }
 
-function renderAll() { renderHome(); renderExercises(); renderCalendar(); renderSummary(); renderSettingsUI(); }
+function renderAll() { renderHome(); renderExercises(); renderCalendar(); renderSummary(); }
 
 function renderHome() {
   const total = dayTotal(state.selectedDate);
@@ -440,7 +551,7 @@ function renderExercises() {
         const amount = Number(dayData(state.selectedDate)[ex.id] || 0);
         return `<div class="exercise-row hover-lift">
           <button class="exercise-row-main" data-log-id="${ex.id}"><span class="row-icon">${escapeHtml(ex.icon || '✦')}</span><span><b>${escapeHtml(ex.name)}</b><small>${escapeHtml(ex.hint || '')} · ${amount} сьогодні</small></span></button>
-          <div class="row-actions"><button class="add-small" data-add-id="${ex.id}" aria-label="Додати ${escapeHtml(ex.name)}">＋</button><button class="delete-small" data-delete-exercise="${ex.id}" title="Видалити вправу" aria-label="Видалити вправу">🗑</button></div>
+          <div class="row-actions"><button class="add-small" data-add-id="${ex.id}" aria-label="Додати ${escapeHtml(ex.name)}">＋</button><button class="exercise-more" data-exercise-menu="${ex.id}" title="Дії з вправою" aria-label="Дії з вправою">•••</button></div>
         </div>`;
       }).join('') : '<div class="empty-inline">У цьому розділі поки немає вправ.</div>'}</div>
     </section>`;
@@ -449,7 +560,7 @@ function renderExercises() {
   $$('#exercise-sections [data-log-id]').forEach(btn => btn.addEventListener('click', () => openLogModal(exerciseById(btn.dataset.logId))));
   $$('#exercise-sections [data-add-id]').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); openLogModal(exerciseById(btn.dataset.addId)); }));
   $$('#exercise-sections [data-add-section]').forEach(btn => btn.addEventListener('click', () => { openBuilder('exercise'); $('#exercise-category').value = btn.dataset.addSection; }));
-  $$('#exercise-sections [data-delete-exercise]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); deleteExercise(btn.dataset.deleteExercise); }));
+  $$('#exercise-sections [data-exercise-menu]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openExerciseMenu(btn.dataset.exerciseMenu, btn); }));
   $$('#exercise-sections [data-section-menu]').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openCategoryMenu(btn.dataset.sectionMenu, btn); }));
   $('#restore-defaults-inline')?.addEventListener('click', restoreDefaultLibrary);
 }
@@ -491,6 +602,41 @@ function closeCategoryMenu() {
   const menu = window.__repTrackCategoryMenu;
   if (menu) menu.remove();
   window.__repTrackCategoryMenu = null;
+}
+
+function openExerciseMenu(id, anchor) {
+  const ex = exerciseById(id);
+  if (!ex) return;
+  closeExerciseMenu();
+  const menu = document.createElement('div');
+  menu.className = 'exercise-menu category-menu';
+  menu.innerHTML = `
+    <button data-menu-log>＋ Додати повторення</button>
+    <button class="danger-menu" data-menu-delete>🗑 Видалити вправу</button>`;
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  const menuWidth = 190;
+  menu.style.top = `${Math.min(window.innerHeight - 108, r.bottom + 8)}px`;
+  menu.style.left = `${Math.max(12, Math.min(window.innerWidth - menuWidth - 12, r.right - menuWidth))}px`;
+  menu.querySelector('[data-menu-log]').addEventListener('click', () => {
+    closeExerciseMenu();
+    openLogModal(ex);
+  });
+  menu.querySelector('[data-menu-delete]').addEventListener('click', () => {
+    closeExerciseMenu();
+    deleteExercise(id);
+  });
+  setTimeout(() => document.addEventListener('click', exerciseMenuOutside, { once: true }), 0);
+  window.__repTrackExerciseMenu = menu;
+}
+
+function exerciseMenuOutside(e) {
+  if (window.__repTrackExerciseMenu && !window.__repTrackExerciseMenu.contains(e.target)) closeExerciseMenu();
+}
+function closeExerciseMenu() {
+  const menu = window.__repTrackExerciseMenu;
+  if (menu) menu.remove();
+  window.__repTrackExerciseMenu = null;
 }
 
 function deleteExercise(id) {
@@ -561,10 +707,6 @@ function deleteLogEntry(exerciseId,date) {
   delete state.logs[date][exerciseId];
   if(!Object.keys(state.logs[date]).length) delete state.logs[date];
   saveLogs(); renderAll(); toast('Запис видалено');
-}
-
-function renderSettingsUI() {
-  $('#daily-goal-input').value = state.settings.dailyGoal;
 }
 
 function renderSummary() {

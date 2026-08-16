@@ -41,7 +41,7 @@
               <p class="eyebrow">Денна ціль</p>
               <h3 id="goal-title">0 / 50 повторень</h3>
             </div>
-            <span class="goal-status" id="goal-status">Ще є час</span>
+            <div class="goal-actions"><span class="goal-status" id="goal-status">Ще є час</span><button class="goal-edit" id="goal-edit" type="button" aria-label="Змінити денну ціль">Змінити</button></div>
           </div>
           <div class="goal-track"><div class="goal-fill" id="goal-fill"></div></div>
           <div class="goal-foot"><span id="goal-left">Залишилось 50</span><span id="best-streak-inline">Рекорд: 0 днів</span></div>
@@ -111,15 +111,6 @@
           <p class="muted">Загальна кількість повторень, рекорди та розподіл за вправами.</p>
         </div>
         <div class="summary-grid" id="summary-grid"></div>
-        <div class="settings-card surface-glass">
-          <div class="section-heading tight"><div><p class="eyebrow">Моя ціль</p><h3>Ціль на день</h3></div><span class="badge">🎯</span></div>
-          <div class="settings-grid">
-            <label class="field-label">Денна ціль, повторень<input id="daily-goal-input" type="number" min="1" max="99999" inputmode="numeric"></label>
-          </div>
-          <div class="settings-actions">
-            <button class="secondary-btn" id="save-settings">Зберегти ціль</button>
-          </div>
-        </div>
         <div class="stats-card">
           <div class="section-heading tight">
             <div>
@@ -139,7 +130,7 @@
       <button class="nav-item" data-screen="exercises"><span>↟</span><small>Вправи</small></button>
       <button class="nav-item" data-screen="calendar"><span>▦</span><small>Календар</small></button>
       <button class="nav-item" data-screen="profile"><span>◔</span><small>Статистика</small></button>
-    <span class="liquid-lens" aria-hidden="true"></span>
+    <span class="liquid-lens" aria-hidden="true"><span class="liquid-specular"></span><span class="liquid-caustic"></span></span>
     </nav>
   </div>
 

@@ -33,3 +33,52 @@ main{padding:10px 14px 0}.screen{display:none;animation:screenIn .22s ease}.scre
 body.light{--bg:#f3f5f7;--surface:#fff;--surface-2:#edf0f4;--surface-3:#dfe4eb;--text:#13161b;--muted:#697386;--line:rgba(12,20,30,.08);background:linear-gradient(#f7f8fa,#eef1f5)}body.light .bottom-nav{background:rgba(255,255,255,.9)}
 @media (min-width:680px){body{padding:16px 0}.app-shell{min-height:calc(100vh - 32px);border:1px solid var(--line);border-radius:28px;overflow:hidden;background:rgba(9,11,16,.28)}.bottom-nav{bottom:16px;border:1px solid var(--line);border-radius:20px;width:calc(min(100%,520px) - 24px)}.fab{bottom:102px}}
 @media (max-width:370px){.exercise-grid{grid-template-columns:1fr}.calendar-cell{min-height:49px}.calendar-count{display:none}.hero-number{font-size:52px}}
+
+
+/* Mobile / iPhone polish */
+html, body, button, a, input, select { touch-action: manipulation; }
+html { -webkit-text-size-adjust: 100%; }
+body { overscroll-behavior-x: none; }
+input, select { min-width: 0; }
+#modal-reps { -webkit-user-select: text; user-select: text; }
+.date-label input[type="date"] { box-sizing:border-box; min-width:0; max-width:100%; width:100%; height:46px; font-size:16px; line-height:1.2; padding:10px 12px; }
+.modal { max-width:calc(100vw - 24px); overflow:hidden; }
+.mini-more{width:34px;height:34px;border-radius:11px;background:var(--surface-2);color:var(--muted);font-size:15px;font-weight:950;letter-spacing:1px}
+.mini-more:hover{color:var(--text);background:var(--surface-3)}
+.category-menu{position:fixed;z-index:80;width:180px;padding:6px;border:1px solid var(--line);border-radius:16px;background:rgba(19,24,34,.96);backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%);box-shadow:0 20px 50px rgba(0,0,0,.35);animation:menuIn .14s ease}
+.category-menu button{width:100%;display:block;text-align:left;padding:11px 12px;border-radius:11px;background:transparent;color:var(--text);font-size:13px;font-weight:800}
+.category-menu button:hover{background:rgba(255,255,255,.06)} .category-menu .danger-menu{color:var(--danger)}
+@keyframes menuIn{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+
+@supports (-webkit-touch-callout:none) {
+  .ios-iphone .bottom-nav{
+    background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.07));
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow:0 10px 34px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.16);
+    backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
+  }
+  .ios-iphone .nav-item.active{background:rgba(255,255,255,.13);box-shadow:inset 0 1px 0 rgba(255,255,255,.13)}
+  .ios-iphone .hero-card,
+  .ios-iphone .stats-card,
+  .ios-iphone .calendar-card,
+  .ios-iphone .day-detail,
+  .ios-iphone .exercise-card,
+  .ios-iphone .summary-card,
+  .ios-iphone .exercise-section,
+  .ios-iphone .modal,
+  .ios-iphone .icon-btn,
+  .ios-iphone .surface-glass{
+    background:linear-gradient(145deg,rgba(255,255,255,.13),rgba(255,255,255,.055));
+    border-color:rgba(255,255,255,.15);
+    backdrop-filter:blur(22px) saturate(155%);-webkit-backdrop-filter:blur(22px) saturate(155%);
+  }
+  .ios-iphone .modal-backdrop{background:rgba(0,0,0,.48);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  .ios-iphone .fab,.ios-iphone .square-add{box-shadow:0 16px 34px rgba(166,243,110,.24),inset 0 1px 0 rgba(255,255,255,.38)}
+}
+body.light .category-menu{background:rgba(255,255,255,.94)}
+@media (max-width:390px){
+  main{padding-left:12px;padding-right:12px}
+  .modal{padding:20px 15px 16px}
+  .modal-counter{grid-template-columns:46px minmax(0,1fr) 46px;gap:8px}
+  .date-label input[type="date"]{padding-left:9px;padding-right:9px}
+}

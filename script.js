@@ -93,7 +93,22 @@ function exerciseTotal(exerciseId) { return Object.values(state.logs).reduce((su
 function formatFullDate(key) { return parseDate(key).toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); }
 function formatShortDate(key) { return parseDate(key).toLocaleDateString('uk-UA', { day:'numeric', month:'short' }); }
 
+function setupMobileUX() {
+  const ua = navigator.userAgent || '';
+  const isIPhone = /iPhone|iPod/i.test(ua) && !/iPad/i.test(ua);
+  document.documentElement.classList.toggle('ios-iphone', isIPhone);
+  document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 280) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false });
+  window.addEventListener('resize', () => document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`));
+}
+
 function init() {
+  setupMobileUX();
   migrateLegacyData();
   applyTheme(state.theme);
   bindNavigation();
@@ -159,7 +174,6 @@ function openLogModal(exercise) {
   $('#modal-reps').value = String(Math.max(1, current || 10));
   $('#modal-date').value = state.selectedDate;
   $('#log-modal').classList.remove('hidden');
-  setTimeout(() => $('#modal-reps').select(), 50);
 }
 
 function closeLogModal() { state.modalExercise = null; $('#log-modal').classList.add('hidden'); }
@@ -290,7 +304,7 @@ function renderExercises() {
         <div class="section-title-wrap"><span class="section-icon">${escapeHtml(category.icon || '◉')}</span><div><h3>${escapeHtml(category.name)}</h3><span>${exercises.length} ${exercises.length === 1 ? 'вправа' : exercises.length < 5 ? 'вправи' : 'вправ'}</span></div></div>
         <div class="section-actions">
           <button class="mini-add" data-add-section="${category.id}" title="Додати вправу">＋</button>
-          ${category.custom ? `<button class="mini-delete" data-delete-section="${category.id}" title="Видалити розділ">⌫</button>` : ''}
+          ${category.custom ? `<button class="mini-more" data-section-menu="${category.id}" title="Дії розділу" aria-label="Дії розділу">•••</button>` : ''}
         </div>
       </div>
       <div class="exercise-list">${exercises.length ? exercises.map(ex => {
@@ -310,6 +324,40 @@ function renderExercises() {
   $$('#exercise-sections [data-delete-section]').forEach(btn => btn.addEventListener('click', () => deleteCustomCategory(btn.dataset.deleteSection)));
 }
 
+function openCategoryMenu(id, anchor) {
+  const category = categoryById(id);
+  if (!category || !category.custom) return;
+  closeCategoryMenu();
+  const menu = document.createElement('div');
+  menu.className = 'category-menu';
+  menu.innerHTML = `
+    <button data-menu-add>＋ Додати вправу</button>
+    <button class="danger-menu" data-menu-delete>Видалити розділ</button>`;
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = `${Math.min(window.innerHeight - 130, r.bottom + 8)}px`;
+  menu.style.left = `${Math.max(12, Math.min(window.innerWidth - 192, r.right - 184))}px`;
+  menu.querySelector('[data-menu-add]').addEventListener('click', () => {
+    closeCategoryMenu();
+    openBuilder('exercise');
+    $('#exercise-category').value = id;
+  });
+  menu.querySelector('[data-menu-delete]').addEventListener('click', () => {
+    closeCategoryMenu();
+    deleteCustomCategory(id);
+  });
+  setTimeout(() => document.addEventListener('click', categoryMenuOutside, { once: true }), 0);
+  window.__repTrackCategoryMenu = menu;
+}
+function categoryMenuOutside(e) {
+  if (window.__repTrackCategoryMenu && !window.__repTrackCategoryMenu.contains(e.target)) closeCategoryMenu();
+}
+function closeCategoryMenu() {
+  const menu = window.__repTrackCategoryMenu;
+  if (menu) menu.remove();
+  window.__repTrackCategoryMenu = null;
+}
+
 function deleteCustomExercise(id) {
   const ex = exerciseById(id); if (!ex) return;
   if (!confirm(`Видалити вправу «${ex.name}»?`)) return;
@@ -321,7 +369,8 @@ function deleteCustomExercise(id) {
 function deleteCustomCategory(id) {
   const category = categoryById(id); if (!category || !category.custom) return;
   const exs = exercisesInCategory(id);
-  if (!confirm(`Видалити розділ «${category.name}»${exs.length ? ` разом із ${exs.length} вправами` : ''}?`)) return;
+  const detail = exs.length ? `Це видалить також ${exs.length} ${exs.length === 1 ? 'вправу' : exs.length < 5 ? 'вправи' : 'вправ'}.` : 'Розділ порожній.';
+  if (!confirm(`Видалити «${category.name}»?\n\n${detail}`)) return;
   const ids = new Set(exs.map(e => e.id));
   state.categories = state.categories.filter(c => c.id !== id);
   state.exercises = state.exercises.filter(e => e.categoryId !== id);

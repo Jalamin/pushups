@@ -168,139 +168,43 @@ function setupLiquidNav(isIPhone) {
   const items = nav ? [...nav.querySelectorAll('.nav-item')] : [];
   if (!nav || !lens || !isIPhone || !items.length) return;
 
-  let pressed = false;
-  let pointerId = null;
-  let raf = 0;
-  let targetX = 0;
-  let currentX = 0;
-  let targetW = 0;
-  let currentW = 0;
-  let targetScale = 1;
-  let currentScale = 1;
-  let hoveredIndex = -1;
+  const syncLens = (animate = true) => {
+    const active = nav.querySelector('.nav-item.active') || items[0];
+    if (!active) return;
+    const nr = nav.getBoundingClientRect();
+    const ar = active.getBoundingClientRect();
+    const x = ar.left - nr.left + 6;
+    const w = Math.max(44, ar.width - 12);
+    lens.style.setProperty('--lens-x', `${x}px`);
+    lens.style.setProperty('--lens-w', `${w}px`);
+    lens.style.transition = animate
+      ? 'transform .38s cubic-bezier(.22,.85,.3,1), width .38s cubic-bezier(.22,.85,.3,1)'
+      : 'none';
+  };
 
-  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-  function metrics() {
-    const rect = nav.getBoundingClientRect();
-    return { rect, slot: rect.width / items.length };
-  }
-
-  function setTargetForItem(item, snap = false) {
+  nav.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'touch') return;
+    const item = e.target.closest('.nav-item');
     if (!item) return;
-    const { rect } = metrics();
-    const r = item.getBoundingClientRect();
-    targetW = Math.max(52, r.width - 8);
-    targetX = r.left - rect.left + 4;
-    targetScale = 1;
-    if (snap) {
-      currentX = targetX;
-      currentW = targetW;
-      currentScale = 1;
-      renderGlass();
-    }
-  }
-
-  function renderGlass() {
-    lens.style.transform = `translate3d(${currentX.toFixed(2)}px,0,0) scale(${currentScale.toFixed(3)})`;
-    lens.style.width = `${currentW.toFixed(2)}px`;
-  }
-
-  function tick() {
-    raf = 0;
-    const dx = targetX - currentX;
-    const dw = targetW - currentW;
-    const ds = targetScale - currentScale;
-    currentX += dx * 0.32;
-    currentW += dw * 0.32;
-    currentScale += ds * 0.28;
-    renderGlass();
-    if (Math.abs(dx) > 0.15 || Math.abs(dw) > 0.15 || Math.abs(ds) > 0.002) raf = requestAnimationFrame(tick);
-  }
-
-  function schedule() {
-    if (!raf) raf = requestAnimationFrame(tick);
-  }
-
-  function itemAt(clientX) {
-    const { rect, slot } = metrics();
-    const x = clamp(clientX - rect.left, 0, rect.width - 1);
-    return items[clamp(Math.floor(x / slot), 0, items.length - 1)];
-  }
-
-  function moveTo(clientX, dragging) {
-    const { rect, slot } = metrics();
-    const x = clamp(clientX - rect.left, 0, rect.width - 1);
-    const index = clamp(Math.floor(x / slot), 0, items.length - 1);
-    const item = items[index];
-    const r = item.getBoundingClientRect();
-    const center = r.left - rect.left + r.width / 2;
-    const offset = clamp(x - center, -36, 36);
-    const stretch = dragging ? clamp(Math.abs(offset) * 0.20, 0, 10) : 0;
-    targetW = Math.max(52, r.width - 8 + stretch);
-    targetX = clamp(center - targetW / 2 + offset * 0.18, 4, rect.width - targetW - 4);
-    targetScale = dragging ? 1.045 : 1;
-
-    if (hoveredIndex !== index) {
-      items.forEach((el, i) => el.classList.toggle('is-hovered', i === index));
-      hoveredIndex = index;
-    }
-    return item;
-  }
-
-  function pointerDown(e) {
-    if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
-    pressed = true;
-    pointerId = e.pointerId;
-    nav.setPointerCapture?.(pointerId);
+    item.classList.add('is-pressing');
     nav.classList.add('is-pressed');
-    lens.classList.add('is-pressed');
-    lens.style.transition = 'none';
-    moveTo(e.clientX, true);
-    schedule();
-    e.preventDefault();
-  }
-
-  function pointerMove(e) {
-    if (!pressed || e.pointerId !== pointerId) return;
-    e.preventDefault();
-    moveTo(e.clientX, true);
-    schedule();
-  }
-
-  function pointerUp(e) {
-    if (!pressed || e.pointerId !== pointerId) return;
-    const item = itemAt(e.clientX);
-    pressed = false;
-    pointerId = null;
-    nav.releasePointerCapture?.(e.pointerId);
+  }, { passive: true });
+  const release = () => {
     nav.classList.remove('is-pressed');
-    lens.classList.remove('is-pressed');
-    lens.style.transition = '';
-    if (item) item.click();
-    setTargetForItem(nav.querySelector('.nav-item.active') || items[0]);
-    targetScale = 1;
-    items.forEach(el => el.classList.remove('is-hovered'));
-    hoveredIndex = -1;
-    lens.classList.add('is-settling');
-    schedule();
-    window.setTimeout(() => lens.classList.remove('is-settling'), 320);
-    e.preventDefault();
-  }
-
-  nav.addEventListener('pointerdown', pointerDown, { passive: false });
-  nav.addEventListener('pointermove', pointerMove, { passive: false });
-  nav.addEventListener('pointerup', pointerUp, { passive: false });
-  nav.addEventListener('pointercancel', pointerUp, { passive: false });
+    items.forEach(i => i.classList.remove('is-pressing'));
+    syncLens(true);
+  };
+  nav.addEventListener('pointerup', release, { passive: true });
+  nav.addEventListener('pointercancel', release, { passive: true });
+  nav.addEventListener('pointerleave', release, { passive: true });
   nav.addEventListener('contextmenu', e => e.preventDefault());
   nav.addEventListener('selectstart', e => e.preventDefault());
+  nav.addEventListener('dragstart', e => e.preventDefault());
 
-  window.addEventListener('resize', () => setTargetForItem(nav.querySelector('.nav-item.active') || items[0], true));
-
-  setTimeout(() => {
-    setTargetForItem(nav.querySelector('.nav-item.active') || items[0], true);
-    lens.classList.add('ready');
-  }, 40);
+  window.addEventListener('resize', () => syncLens(false));
+  window.addEventListener('orientationchange', () => setTimeout(() => syncLens(false), 180));
+  requestAnimationFrame(() => requestAnimationFrame(() => syncLens(false)));
+  window.__syncRepNavGlass = syncLens;
 }
 
 function init() {
@@ -342,6 +246,7 @@ function showScreen(name) {
   state.currentScreen = name;
   $$('.screen').forEach(screen => screen.classList.toggle('active', screen.id === `screen-${name}`));
   $$('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.screen === name));
+  window.__syncRepNavGlass?.(true);
   document.body.classList.toggle('fab-home-only', name !== 'home');
   renderAll();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -589,22 +494,22 @@ function renderExercises() {
 function bindDragDrop() {
   $$('#exercise-sections .exercise-section').forEach(section => {
     section.draggable = true;
-    section.addEventListener('dragstart', e => { e.dataTransfer.setData('text/category', section.dataset.category); section.classList.add('dragging'); });
-    section.addEventListener('dragend', () => section.classList.remove('dragging'));
+    section.addEventListener('dragstart', e => { e.dataTransfer.setData('text/category', section.dataset.category); section.classList.add('dragging'); document.body.classList.add('dragging-library'); window.getSelection()?.removeAllRanges(); });
+    section.addEventListener('dragend', () => { section.classList.remove('dragging'); document.body.classList.remove('dragging-library'); });
     section.addEventListener('dragover', e => e.preventDefault());
     section.addEventListener('drop', e => {
       e.preventDefault();
       const id = e.dataTransfer.getData('text/category'); if (!id || id === section.dataset.category) return;
       const from = state.categories.findIndex(c=>c.id===id), to = state.categories.findIndex(c=>c.id===section.dataset.category); if (from<0 || to<0) return;
-      const [moved] = state.categories.splice(from,1); state.categories.splice(to,0,moved); persistLibrary(); renderExercises();
+      const [moved] = state.categories.splice(from,1); state.categories.splice(to,0,moved); persistLibrary(); document.body.classList.remove('dragging-library'); renderExercises();
       toast('Розділи впорядковано');
     });
   });
   enableTouchReorder();
   $$('#exercise-sections .exercise-row').forEach(row => {
     row.draggable = true;
-    row.addEventListener('dragstart', e => { e.dataTransfer.setData('text/exercise', row.querySelector('[data-log-id]')?.dataset.logId || ''); row.classList.add('dragging'); });
-    row.addEventListener('dragend', () => row.classList.remove('dragging'));
+    row.addEventListener('dragstart', e => { e.dataTransfer.setData('text/exercise', row.querySelector('[data-log-id]')?.dataset.logId || ''); row.classList.add('dragging'); document.body.classList.add('dragging-library'); window.getSelection()?.removeAllRanges(); });
+    row.addEventListener('dragend', () => { row.classList.remove('dragging'); document.body.classList.remove('dragging-library'); });
     row.addEventListener('dragover', e => e.preventDefault());
     row.addEventListener('drop', e => {
       e.preventDefault();
@@ -616,7 +521,7 @@ function bindDragDrop() {
       const rest=state.exercises.filter(x=>x.categoryId!==moving.categoryId);
       const firstIndex=Math.min(...state.exercises.map((x,i)=>x.categoryId===moving.categoryId?i:999999));
       rest.splice(firstIndex===999999?rest.length:firstIndex,0,...reordered);
-      state.exercises=rest; persistLibrary(); renderExercises(); toast('Вправи впорядковано');
+      state.exercises=rest; persistLibrary(); document.body.classList.remove('dragging-library'); renderExercises(); toast('Вправи впорядковано');
     });
   });
 }
@@ -627,11 +532,11 @@ function enableTouchReorder() {
       const handle = el.querySelector(type === 'exercise' ? '.row-drag' : '.drag-handle');
       if (!handle) return;
       let timer=null, dragging=false, currentTarget=null;
-      const cleanup=()=>{ if(timer){clearTimeout(timer);timer=null;} if(dragging){el.classList.remove('touch-dragging'); document.body.classList.remove('touch-reordering');} dragging=false; currentTarget=null; };
+      const cleanup=()=>{ if(timer){clearTimeout(timer);timer=null;} el.classList.remove('touch-dragging'); document.body.classList.remove('touch-reordering'); dragging=false; currentTarget=null; window.getSelection()?.removeAllRanges(); };
       handle.addEventListener('pointerdown', e=>{
         if(e.pointerType==='mouse') return;
         e.preventDefault();
-        timer=setTimeout(()=>{ dragging=true; el.classList.add('touch-dragging'); document.body.classList.add('touch-reordering'); handle.setPointerCapture?.(e.pointerId); }, 350);
+        timer=setTimeout(()=>{ dragging=true; el.classList.add('touch-dragging'); document.body.classList.add('touch-reordering'); window.getSelection()?.removeAllRanges(); handle.setPointerCapture?.(e.pointerId); }, 350);
       });
       handle.addEventListener('pointermove', e=>{
         if(!dragging) return;
@@ -780,25 +685,56 @@ function renderCalendar() {
 }
 
 function renderHeatmap() {
-  const grid = $('#heatmap-grid'); const months = $('#heatmap-months'); const totalBadge = $('#heatmap-total');
+  const grid = $('#heatmap-grid');
+  const months = $('#heatmap-months');
+  const totalBadge = $('#heatmap-total');
   if (!grid || !months || !totalBadge) return;
-  const end = new Date(state.selectedDate + 'T12:00:00');
-  const start = new Date(end); start.setDate(start.getDate() - 90);
-  const monday = new Date(start); monday.setDate(monday.getDate() - ((monday.getDay()+6)%7));
-  const totalDays = 13 * 7;
-  const cells=[]; let total=0; const monthLabels=[]; let lastMonth=-1;
-  for(let i=0;i<totalDays;i++){
-    const d=new Date(monday); d.setDate(monday.getDate()+i); const key=localDateKey(d); const reps=dayTotal(key); total+=reps;
-    const goal=Math.max(1,Number(state.settings.dailyGoal||50));
-    const ratio=reps/goal;
-    const level=reps===0?0:ratio<0.25?1:ratio<0.5?2:ratio<1?3:4;
-    cells.push({key,reps,level,d});
-    if(d.getDate()<=7 && d.getMonth()!==lastMonth){ lastMonth=d.getMonth(); monthLabels.push({col:Math.floor(i/7)+1,label:d.toLocaleDateString('uk-UA',{month:'short'}).replace('.','')}); }
+
+  const today = parseDate(localDateKey());
+  const end = new Date(today);
+  const start = new Date(end);
+  start.setDate(start.getDate() - 90);
+  const monday = new Date(start);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const cells = [];
+  let total = 0;
+  const max = Math.max(1, ...Array.from({length: 91}, (_, i) => {
+    const d = new Date(start); d.setDate(d.getDate() + i); return dayTotal(localDateKey(d));
+  }));
+
+  for (let i = 0; i < 13 * 7; i++) {
+    const d = new Date(monday); d.setDate(monday.getDate() + i);
+    const key = localDateKey(d);
+    const reps = d > end ? 0 : dayTotal(key);
+    total += d <= end && d >= start ? reps : 0;
+    const ratio = reps / Math.max(max, 1);
+    const goalRatio = reps / Math.max(1, Number(state.settings.dailyGoal || 50));
+    let level = 0;
+    if (reps > 0) level = goalRatio >= 1 ? 4 : goalRatio >= .75 ? 3 : goalRatio >= .4 ? 2 : 1;
+    cells.push({ key, reps, level, future: d > end });
   }
-  grid.innerHTML=cells.map(c=>`<button class="heatmap-cell level-${c.level} ${c.key===state.selectedDate?'selected':''}" data-date="${c.key}" aria-label="${escapeHtml(formatShortDate(c.key))}: ${c.reps} повторень" title="${escapeHtml(formatShortDate(c.key))}: ${c.reps} повторень"></button>`).join('');
-  months.innerHTML=monthLabels.map(x=>`<span style="grid-column:${x.col}">${escapeHtml(x.label)}</span>`).join('');
-  totalBadge.textContent=total.toLocaleString('uk-UA');
-  $$('#heatmap-grid [data-date]').forEach(cell=>cell.addEventListener('click',()=>{ state.selectedDate=cell.dataset.date; state.calendarDate=parseDate(cell.dataset.date); renderCalendar(); renderHome(); renderExercises(); renderHeatmap(); }));
+
+  grid.innerHTML = cells.map(c => `<button class="heatmap-cell level-${c.level} ${c.key === state.selectedDate ? 'selected' : ''} ${c.future ? 'future' : ''}" data-date="${c.key}" aria-label="${escapeHtml(formatShortDate(c.key))}: ${c.reps} повторень" title="${escapeHtml(formatShortDate(c.key))}: ${c.reps} повторень"></button>`).join('');
+
+  const monthLabels = [];
+  let lastMonth = '';
+  for (let col = 0; col < 13; col++) {
+    const d = new Date(monday); d.setDate(monday.getDate() + col * 7);
+    const label = d.toLocaleDateString('uk-UA', { month: 'short' }).replace('.', '');
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    if (key !== lastMonth) { monthLabels.push({ col: col + 1, label }); lastMonth = key; }
+  }
+  months.innerHTML = monthLabels.map(x => `<span style="grid-column:${x.col}">${escapeHtml(x.label)}</span>`).join('');
+  totalBadge.textContent = total.toLocaleString('uk-UA');
+  const period = $('#heatmap-period');
+  if (period) period.textContent = `Останні 13 тижнів · до ${formatShortDate(localDateKey())}`;
+
+  $$('#heatmap-grid [data-date]').forEach(cell => cell.addEventListener('click', () => {
+    if (cell.classList.contains('future')) return;
+    state.selectedDate = cell.dataset.date;
+    state.calendarDate = parseDate(cell.dataset.date);
+    renderCalendar(); renderHome(); renderExercises(); renderHeatmap();
+  }));
 }
 
 function renderDayDetail() {
@@ -818,10 +754,40 @@ function renderDayDetail() {
 
 function bindSwipeRows() {
   $$('#day-detail .swipe-row').forEach(row => {
-    let startX=0, startY=0, moved=false;
-    row.addEventListener('touchstart', e => { const t=e.touches[0]; startX=t.clientX; startY=t.clientY; moved=false; }, {passive:true});
-    row.addEventListener('touchmove', e => { const t=e.touches[0]; const dx=t.clientX-startX, dy=t.clientY-startY; if(Math.abs(dx)>12 && Math.abs(dx)>Math.abs(dy)){ moved=true; row.classList.toggle('swiped', dx < -48); } }, {passive:true});
-    row.addEventListener('touchend', () => { if(!moved) row.classList.remove('swiped'); });
+    let startX = 0, startY = 0, currentX = 0, tracking = false;
+    const actionsWidth = () => Math.min(156, Math.max(132, window.innerWidth * 0.34));
+
+    const setX = (x, animate = false) => {
+      row.style.setProperty('--swipe-x', `${x}px`);
+      row.classList.toggle('swiped', x < -24);
+      row.style.setProperty('--swipe-transition', animate ? 'transform .26s cubic-bezier(.2,.8,.2,1)' : 'none');
+    };
+    row.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch') return;
+      const content = e.target.closest('.swipe-content');
+      if (!content) return;
+      tracking = true; startX = e.clientX; startY = e.clientY; currentX = row.classList.contains('swiped') ? -actionsWidth() : 0;
+      row.setPointerCapture?.(e.pointerId);
+      row.classList.add('swiping');
+    }, { passive: true });
+    row.addEventListener('pointermove', e => {
+      if (!tracking || e.pointerType !== 'touch') return;
+      const dx = e.clientX - startX; const dy = e.clientY - startY;
+      if (Math.abs(dy) > Math.abs(dx) + 6) { tracking = false; row.classList.remove('swiping'); return; }
+      const x = Math.max(-actionsWidth(), Math.min(0, currentX + dx));
+      setX(x, false);
+      e.preventDefault();
+    }, { passive: false });
+    const end = e => {
+      if (!tracking) return;
+      tracking = false; row.classList.remove('swiping');
+      const width = actionsWidth();
+      const x = parseFloat(row.style.getPropertyValue('--swipe-x') || '0');
+      setX(x < -width * .38 ? -width : 0, true);
+      row.releasePointerCapture?.(e.pointerId);
+    };
+    row.addEventListener('pointerup', end, { passive: true });
+    row.addEventListener('pointercancel', end, { passive: true });
   });
   $$('#day-detail [data-swipe-edit]').forEach(btn=>btn.addEventListener('click',()=>{ const ex=exerciseById(btn.dataset.swipeEdit); if(ex) openLogModal(ex); }));
   $$('#day-detail [data-swipe-delete]').forEach(btn=>btn.addEventListener('click',()=>deleteLogEntry(btn.dataset.swipeDelete,state.selectedDate)));

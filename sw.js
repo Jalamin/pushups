@@ -1,4 +1,4 @@
-const CACHE_NAME = 'reptrack-v9-cache';
+const CACHE_NAME = 'reptrack-v10-cache';
 const APP_SHELL = [
   './', './index.html', './style.css', './script.js', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './icons/push-up.svg', './icons/pull-up.svg',

@@ -304,3 +304,51 @@ body{overflow-x:hidden}
 @media (max-width:390px){.icon-picker{grid-template-columns:repeat(3,minmax(0,1fr))}.network-status{display:none}.history-stats b{font-size:18px}.swipe-row.swiped .swipe-content{transform:translateX(-138px)}.swipe-actions{width:133px}}
 @media (prefers-reduced-motion:reduce){.swipe-content,.icon-choice,.history-row{transition:none!important}}
 .exercise-row{grid-template-columns:30px 1fr auto}.row-drag{align-self:stretch;display:grid;place-items:center;color:var(--muted);font-size:14px;font-weight:900;letter-spacing:-3px;user-select:none;-webkit-user-select:none;touch-action:none}.drag-handle{color:var(--muted);font-size:12px;font-weight:950;letter-spacing:-3px;user-select:none;-webkit-user-select:none;touch-action:none;display:inline-flex;align-items:center;justify-content:center;width:18px;height:28px;opacity:.75}.touch-dragging{opacity:.55;box-shadow:0 0 0 2px rgba(166,243,110,.18)}body.touch-reordering{overflow:hidden;touch-action:none}
+
+/* v10 stability pass */
+.ios-iphone .bottom-nav{
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+.ios-iphone .nav-item{
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  touch-action:manipulation;
+  -webkit-user-drag:none;
+}
+.ios-iphone .liquid-lens{
+  left:0;top:6px;width:var(--lens-w,54px);
+  transform:translate3d(var(--lens-x,6px),0,0);
+  transition:transform .38s cubic-bezier(.22,.85,.3,1),width .38s cubic-bezier(.22,.85,.3,1),box-shadow .2s ease;
+  will-change:transform,width;
+  backdrop-filter:blur(10px) saturate(145%);
+  -webkit-backdrop-filter:blur(10px) saturate(145%);
+}
+.ios-iphone .nav-item.is-pressing{transform:translateY(-2px) scale(1.05)}
+.ios-iphone .bottom-nav.is-pressed .liquid-lens{box-shadow:inset 0 1px 0 rgba(255,255,255,.38),0 10px 22px rgba(0,0,0,.14)}
+.ios-iphone .liquid-specular,.ios-iphone .liquid-caustic{pointer-events:none}
+
+/* predictable native-like swipe reveal */
+.swipe-row{overflow:hidden;touch-action:pan-y;contain:layout paint}
+.swipe-content{transform:translate3d(var(--swipe-x,0),0,0)!important;transition:var(--swipe-transition,transform .26s cubic-bezier(.2,.8,.2,1));will-change:transform}
+.swipe-row.swiping .swipe-content{transition:none!important}
+.swipe-actions{right:0;width:156px;overflow:hidden;border-radius:0 14px 14px 0}
+.swipe-actions button{min-width:0;border:0}
+
+/* drag/drop: no accidental text selection */
+.exercise-sections,.exercise-section,.exercise-row,.drag-handle,.row-drag{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.exercise-section[draggable="true"],.exercise-row[draggable="true"]{-webkit-user-drag:none}
+body.dragging-library,body.touch-reordering{user-select:none!important;-webkit-user-select:none!important;-webkit-touch-callout:none!important}
+.drag-handle,.row-drag{cursor:grab}
+
+/* heatmap is a fixed recent-period view, not a selected-month view */
+.heatmap-period{font-size:9px;margin-top:2px}
+.heatmap-cell.future{opacity:.22;pointer-events:none}
+.heatmap-grid{touch-action:pan-x;overscroll-behavior-x:contain}
+.heatmap-months{min-width:calc(13 * 16px);grid-template-columns:repeat(13,16px);}
+
+@media (max-width:600px){
+  .heatmap-wrap{overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .heatmap-wrap::-webkit-scrollbar{display:none}
+  .heatmap-body{min-width:250px}
+}

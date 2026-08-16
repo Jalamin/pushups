@@ -2,29 +2,172 @@
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1" />
-  <title>Лічильник Віджимань</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d12" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>RepTrack — тренування</title>
   <link rel="stylesheet" href="style.css" />
-  <style>
-    html, body {
-      overscroll-behavior: none;
-      overflow: hidden;
-      touch-action: manipulation;
-      user-select: none;
-    }
-  </style>
 </head>
 <body>
-  <div class="container">
-    <button id="theme-toggle">Змінити тему</button>
-    <h1>Віджимання</h1>
-    <div class="counter">
-      <button id="decrement">-</button>
-      <span id="count">0</span>
-      <button id="increment">+</button>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Твій тренувальний журнал</p>
+        <h1>RepTrack</h1>
+      </div>
+      <button class="icon-btn" id="theme-toggle" aria-label="Змінити тему" title="Змінити тему">☼</button>
+    </header>
+
+    <main>
+      <section class="screen active" id="screen-home" aria-labelledby="home-title">
+        <div class="hero-card">
+          <div class="hero-glow"></div>
+          <div class="hero-content">
+            <p class="eyebrow">Сьогодні</p>
+            <h2 id="home-title">Твоя активність</h2>
+            <p class="muted" id="today-label"></p>
+          </div>
+          <div class="hero-number" id="today-total">0</div>
+          <div class="hero-caption">повторень сьогодні</div>
+        </div>
+
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Швидкий запис</p>
+            <h2>Вибери вправу</h2>
+          </div>
+          <button class="text-btn" id="open-all-exercises">Усі</button>
+        </div>
+
+        <div class="exercise-grid compact-grid" id="quick-exercises"></div>
+
+        <div class="stats-card">
+          <div class="section-heading tight">
+            <div>
+              <p class="eyebrow">Прогрес</p>
+              <h2>Останні 7 днів</h2>
+            </div>
+            <span class="badge" id="week-total">0</span>
+          </div>
+          <div class="week-chart" id="week-chart"></div>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-exercises" aria-labelledby="exercises-title">
+        <div class="page-title page-title-with-action">
+          <div>
+            <p class="eyebrow">Каталог</p>
+            <h2 id="exercises-title">Вправи</h2>
+            <p class="muted">Створи свої розділи та додавай до них комплекси вправ.</p>
+          </div>
+          <button class="square-add" id="open-builder" aria-label="Додати розділ або вправу">＋</button>
+        </div>
+        <div class="exercise-sections" id="exercise-sections"></div>
+      </section>
+
+      <section class="screen" id="screen-calendar" aria-labelledby="calendar-title">
+        <div class="page-title calendar-title-row">
+          <div>
+            <p class="eyebrow">Історія</p>
+            <h2 id="calendar-title">Календар</h2>
+          </div>
+          <div class="month-switcher">
+            <button class="icon-btn small" id="prev-month" aria-label="Попередній місяць">‹</button>
+            <strong id="calendar-month"></strong>
+            <button class="icon-btn small" id="next-month" aria-label="Наступний місяць">›</button>
+          </div>
+        </div>
+
+        <div class="calendar-card">
+          <div class="calendar-weekdays" aria-hidden="true">
+            <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Нд</span>
+          </div>
+          <div class="calendar-grid" id="calendar-grid"></div>
+        </div>
+
+        <div class="day-detail" id="day-detail"></div>
+      </section>
+
+      <section class="screen" id="screen-profile" aria-labelledby="profile-title">
+        <div class="page-title">
+          <p class="eyebrow">Підсумки</p>
+          <h2 id="profile-title">Статистика</h2>
+          <p class="muted">Загальна кількість повторень, рекорди та розподіл за вправами.</p>
+        </div>
+        <div class="summary-grid" id="summary-grid"></div>
+        <div class="stats-card">
+          <div class="section-heading tight">
+            <div>
+              <p class="eyebrow">Розподіл</p>
+              <h2>За вправами</h2>
+            </div>
+          </div>
+          <div id="exercise-summary" class="exercise-summary"></div>
+        </div>
+      </section>
+    </main>
+
+    <button class="fab" id="fab-add" aria-label="Додати повторення">＋</button>
+
+    <nav class="bottom-nav" aria-label="Основна навігація">
+      <button class="nav-item active" data-screen="home"><span>⌂</span><small>Головна</small></button>
+      <button class="nav-item" data-screen="exercises"><span>↟</span><small>Вправи</small></button>
+      <button class="nav-item" data-screen="calendar"><span>▦</span><small>Календар</small></button>
+      <button class="nav-item" data-screen="profile"><span>◔</span><small>Статистика</small></button>
+    </nav>
+  </div>
+
+  <!-- Log modal -->
+  <div class="modal-backdrop hidden" id="log-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal slide-up">
+      <button class="modal-close" id="modal-close" aria-label="Закрити">×</button>
+      <p class="eyebrow" id="modal-category"></p>
+      <h2 id="modal-title">Додати повторення</h2>
+      <p class="muted" id="modal-subtitle"></p>
+
+      <div class="modal-counter">
+        <button class="counter-btn" id="modal-minus">−</button>
+        <input id="modal-reps" type="number" inputmode="numeric" min="0" step="1" value="10" aria-label="Кількість повторень" />
+        <button class="counter-btn" id="modal-plus">＋</button>
+      </div>
+
+      <label class="date-label">
+        Дата
+        <input id="modal-date" type="date" />
+      </label>
+
+      <button class="primary-btn" id="modal-save">Зберегти</button>
     </div>
-    <h2>Статистика за тиждень</h2>
-    <ul id="week-stats"></ul>
+  </div>
+
+  <!-- Builder modal -->
+  <div class="modal-backdrop hidden" id="builder-modal" role="dialog" aria-modal="true" aria-labelledby="builder-title">
+    <div class="modal slide-up">
+      <button class="modal-close" id="builder-close" aria-label="Закрити">×</button>
+      <p class="eyebrow">Конструктор</p>
+      <h2 id="builder-title">Створи свій розділ</h2>
+      <p class="muted" id="builder-subtitle">Наприклад: «Шия», «Прес», «Ноги» або будь-який твій комплекс.</p>
+
+      <div class="builder-tabs">
+        <button class="builder-tab active" data-builder-mode="category">＋ Розділ</button>
+        <button class="builder-tab" data-builder-mode="exercise">＋ Вправа</button>
+      </div>
+
+      <div id="category-form" class="builder-form">
+        <label class="field-label">Назва розділу<input id="category-name" type="text" maxlength="32" placeholder="Наприклад, Шия" /></label>
+        <label class="field-label">Іконка<input id="category-icon" type="text" maxlength="2" placeholder="◉" /></label>
+        <button class="primary-btn" id="save-category">Створити розділ</button>
+      </div>
+
+      <div id="exercise-form" class="builder-form hidden">
+        <label class="field-label">Назва вправи<input id="exercise-name" type="text" maxlength="50" placeholder="Наприклад, Нахили шиї" /></label>
+        <label class="field-label">Розділ<select id="exercise-category"></select></label>
+        <label class="field-label">Підказка<input id="exercise-hint" type="text" maxlength="40" placeholder="Наприклад, 3 підходи" /></label>
+        <label class="field-label">Іконка<input id="exercise-icon" type="text" maxlength="2" placeholder="↕" /></label>
+        <button class="primary-btn" id="save-exercise">Створити вправу</button>
+      </div>
+    </div>
   </div>
 
   <script src="script.js"></script>
